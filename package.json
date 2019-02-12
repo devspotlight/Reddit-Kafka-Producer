@@ -1,0 +1,19 @@
+{
+  "name": "reddit-bots",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "async.queue": "^0.5.2",
+    "axios": "^0.18.0",
+    "dotenv": "^6.2.0",
+    "pg": "^7.8.0"
+  }
+}
