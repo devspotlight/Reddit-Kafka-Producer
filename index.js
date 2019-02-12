@@ -1,4 +1,4 @@
-/* global require, setTimeout */
+/* global process, require, setTimeout */
 
 const fs = require('fs')
 const readline = require('readline')
@@ -110,4 +110,6 @@ async function main () {
   }
 }
 
-main()
+if (process.env.RUN_SCRIPT) {
+  main()
+}
