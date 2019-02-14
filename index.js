@@ -44,7 +44,7 @@ async function main () {
     const scraper = new ProfileScraper()
 
     const lines = readline.createInterface({
-      input: fs.createReadStream('test.csv')
+      input: fs.createReadStream('bots.csv')
     })
 
     lines.on('line', line => {
@@ -56,6 +56,4 @@ async function main () {
   }
 }
 
-if (process.env.RUN_SCRIPT === 'true') {
-  main()
-}
+main()
