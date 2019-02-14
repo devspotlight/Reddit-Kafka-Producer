@@ -8,10 +8,10 @@ const queue = require('async.queue')
 
 const ProfileScraper = require('./profile-scraper')
 
+require('dotenv').config()
+
 async function main () {
   try {
-    require('dotenv').config()
-
     const pool = new Pool()
 
     const createTableText = `
@@ -44,7 +44,7 @@ async function main () {
     const scraper = new ProfileScraper()
 
     const lines = readline.createInterface({
-      input: fs.createReadStream('bots.csv')
+      input: fs.createReadStream('test.csv')
     })
 
     lines.on('line', line => {
@@ -56,6 +56,6 @@ async function main () {
   }
 }
 
-if (process.env.RUN_SCRIPT) {
+if (process.env.RUN_SCRIPT === 'true') {
   main()
 }
