@@ -1,7 +1,7 @@
 /* global process, require, setTimeout */
 
 const { Pool } = require('pg')
-const QueryStream = require('pg-query-stream')
+const Cursor = require('pg-cursor')
 const queue = require('async.queue')
 
 require('dotenv').config()
@@ -136,9 +136,6 @@ async function main () {
       )
     `
 
-    const dbQ = queue(async ({ comment }, cb) => {
-    }, 50)
-
     function handleRow (row) {
       const profile = row.data
       const comments = profile.comments
@@ -190,10 +187,25 @@ async function main () {
       })
     }
 
-    const query = new QueryStream('SELECT * FROM profiles')
-    const stream = client.query(query)
-    stream.on('data', handleRow)
-    stream.on('end', client.release)
+    const cursor = client.query(new Cursor('select * from profiles'))
+
+    function loop () {
+      console.log('looped')
+      cursor.read(100, (err, rows) => {
+        if (err) throw err
+
+        if (rows.length === 0) {
+          console.log('done')
+          return
+        }
+
+        rows.forEach(handleRow)
+        loop()
+      })
+    }
+
+    loop()
+    client.release()
   } catch (e) {
     console.log(e)
   }
