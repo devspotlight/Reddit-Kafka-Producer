@@ -1,6 +1,7 @@
 /* global process, require, setTimeout */
 
 const { Pool } = require('pg')
+const QueryStream = require('pg-query-stream')
 const queue = require('async.queue')
 
 require('dotenv').config()
@@ -8,6 +9,7 @@ require('dotenv').config()
 async function main () {
   try {
     const pool = new Pool()
+    const client = await pool.connect()
 
     const createTableText = `
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -49,17 +51,12 @@ async function main () {
         quarantine boolean,
         subreddit_type text,
         ups integer,
-        isBot boolean
+        is_bot boolean,
+        is_troll boolean
       );
     `
 
-    await pool.query(createTableText)
-
-    const notBotQuery = `select data from profiles where (data -> 'isBot')::text = 'false';`
-    const botQuery = `select data from profiles where json_array_length(data -> 'comments') < 700 and (data -> 'isBot')::text = 'true' limit 25;`
-
-    const notBots = await pool.query(notBotQuery)
-    const bots = await pool.query(botQuery)
+    await client.query(createTableText)
 
     const insertQuery = `
       INSERT INTO comments(
@@ -98,7 +95,7 @@ async function main () {
         quarantine,
         subreddit_type,
         ups,
-        isBot
+        is_bot
       ) VALUES (
         $1,
         $2,
@@ -141,68 +138,65 @@ async function main () {
 
     const dbQ = queue(async ({ comment }, cb) => {
       console.log('inserting', comment[20])
-      await pool.query(insertQuery, comment)
+      await client.query(insertQuery, comment)
       cb()
     })
 
-    function handleRows (rows) {
-      rows.forEach(row => {
-        const profile = row.data
-        const comments = profile.comments
+    function handleRow (row) {
+      const profile = row.data
+      const comments = profile.comments
 
-        comments.forEach(c => {
-          const comment = [
-            profile.link_karma,
-            profile.comment_karma,
-            profile.created_utc,
-            profile.verified,
-            profile.has_verified_email,
-            c.subreddit_id,
-            c.approved_at_utc,
-            c.edited || 0,
-            c.mod_reason_by,
-            c.banned_by,
-            c.author_flair_type,
-            c.removal_reason,
-            c.link_id,
-            c.author_flair_template_id,
-            c.likes,
-            c.banned_at_utc,
-            c.mod_reason_title,
-            c.gilded,
-            c.archived,
-            c.no_follow,
-            c.author,
-            c.num_comments,
-            c.score,
-            c.over_18,
-            c.controversiality,
-            c.body,
-            c.link_title,
-            c.downs,
-            c.is_submitter,
-            c.subreddit,
-            c.num_reports,
-            c.created_utc,
-            c.quarantine,
-            c.subreddit_type,
-            c.ups,
-            profile.isBot
-          ]
+      comments.forEach(c => {
+        const comment = [
+          profile.link_karma,
+          profile.comment_karma,
+          profile.created_utc,
+          profile.verified,
+          profile.has_verified_email,
+          c.subreddit_id,
+          c.approved_at_utc,
+          c.edited || 0,
+          c.mod_reason_by,
+          c.banned_by,
+          c.author_flair_type,
+          c.removal_reason,
+          c.link_id,
+          c.author_flair_template_id,
+          c.likes,
+          c.banned_at_utc,
+          c.mod_reason_title,
+          c.gilded,
+          c.archived,
+          c.no_follow,
+          c.author,
+          c.num_comments,
+          c.score,
+          c.over_18,
+          c.controversiality,
+          c.body,
+          c.link_title,
+          c.downs,
+          c.is_submitter,
+          c.subreddit,
+          c.num_reports,
+          c.created_utc,
+          c.quarantine,
+          c.subreddit_type,
+          c.ups,
+          profile.isBot
+        ]
 
-          dbQ.push({ comment })
-        })
+        dbQ.push({ comment })
       })
     }
 
-    handleRows(bots.rows)
-    handleRows(notBots.rows)
-
+    const query = new QueryStream('SELECT * FROM profiles')
+    const stream = client.query(query)
+    stream.on('data', handleRow)
+    stream.on('end', client.release)
   } catch (e) {
     console.log(e)
   }
 }
 
-if (process.env.RUN_SCRIPT === 'true') {
-  main()
-}
+main()
