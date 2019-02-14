@@ -137,13 +137,19 @@ async function main () {
       )
     `
 
+    const dbQ = queue(async ({ comment }, cb) => {
+      console.log('inserting', comment[20])
+      await pool.query(insertQuery, comment)
+      cb()
+    })
+
     function handleRow (row) {
       const profile = row.data
       const comments = profile.comments
 
       console.log('handling ', profile.name)
 
-      comments.forEach(async (c) => {
+      comments.forEach((c) => {
         const comment = [
           profile.link_karma,
           profile.comment_karma,
@@ -183,8 +189,7 @@ async function main () {
           profile.isBot
         ]
 
-        console.log('inserting', comment[20])
-        await client.query(insertQuery, comment)
+        dbQ.push({ comment })
       })
     }
 
@@ -192,21 +197,22 @@ async function main () {
 
     function loop () {
       console.log('looped')
-      cursor.read(50, (err, rows) => {
+      cursor.read(10, (err, rows) => {
         if (err) throw err
 
         if (rows.length === 0) {
+          dbQ.drain = () => {}
           console.log('done')
+          client.release()
           return
         }
 
         rows.forEach(handleRow)
-        loop()
       })
     }
 
+    dbQ.drain = loop
     loop()
-    client.release()
   } catch (e) {
     console.log(e)
   }
