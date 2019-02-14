@@ -159,7 +159,7 @@ async function main () {
             profile.has_verified_email,
             c.subreddit_id,
             c.approved_at_utc,
-            c.edited,
+            c.edited || 0,
             c.mod_reason_by,
             c.banned_by,
             c.author_flair_type,
