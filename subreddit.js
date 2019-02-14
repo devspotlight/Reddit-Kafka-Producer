@@ -74,6 +74,4 @@ async function main () {
   }
 }
 
-if (process.env.RUN_SCRIPT === 'true') {
-  main()
-}
+main()
