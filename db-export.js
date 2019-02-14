@@ -8,7 +8,6 @@ require('dotenv').config()
 
 async function main () {
   try {
-    console.log(process.env.PGDATABASE)
     const pool = new Pool()
     const client = await pool.connect()
 
@@ -196,7 +195,6 @@ async function main () {
     const cursor = client.query(new Cursor('select * from profiles'))
 
     function loop () {
-      console.log('looped')
       cursor.read(10, (err, rows) => {
         if (err) throw err
 
