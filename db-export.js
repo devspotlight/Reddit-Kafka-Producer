@@ -8,6 +8,7 @@ require('dotenv').config()
 
 async function main () {
   try {
+    console.log(process.env.PGDATABASE)
     const pool = new Pool()
     const client = await pool.connect()
 
