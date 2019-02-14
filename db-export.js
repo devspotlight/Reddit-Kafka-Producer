@@ -140,53 +140,59 @@ async function main () {
       console.log('inserting', comment[20])
       await client.query(insertQuery, comment)
       cb()
-    })
+    }, 50)
 
     function handleRow (row) {
-      const profile = row.data
-      const comments = profile.comments
+      setTimeout(() => {
+        const profile = row.data
+        const comments = profile.comments
 
-      comments.forEach(c => {
-        const comment = [
-          profile.link_karma,
-          profile.comment_karma,
-          profile.created_utc,
-          profile.verified,
-          profile.has_verified_email,
-          c.subreddit_id,
-          c.approved_at_utc,
-          c.edited || 0,
-          c.mod_reason_by,
-          c.banned_by,
-          c.author_flair_type,
-          c.removal_reason,
-          c.link_id,
-          c.author_flair_template_id,
-          c.likes,
-          c.banned_at_utc,
-          c.mod_reason_title,
-          c.gilded,
-          c.archived,
-          c.no_follow,
-          c.author,
-          c.num_comments,
-          c.score,
-          c.over_18,
-          c.controversiality,
-          c.body,
-          c.link_title,
-          c.downs,
-          c.is_submitter,
-          c.subreddit,
-          c.num_reports,
-          c.created_utc,
-          c.quarantine,
-          c.subreddit_type,
-          c.ups,
-          profile.isBot
-        ]
+        console.log('handling ', profile.name)
 
-        dbQ.push({ comment })
+        comments.forEach(c => {
+          setTimeout(() => {
+            const comment = [
+              profile.link_karma,
+              profile.comment_karma,
+              profile.created_utc,
+              profile.verified,
+              profile.has_verified_email,
+              c.subreddit_id,
+              c.approved_at_utc,
+              c.edited || 0,
+              c.mod_reason_by,
+              c.banned_by,
+              c.author_flair_type,
+              c.removal_reason,
+              c.link_id,
+              c.author_flair_template_id,
+              c.likes,
+              c.banned_at_utc,
+              c.mod_reason_title,
+              c.gilded,
+              c.archived,
+              c.no_follow,
+              c.author,
+              c.num_comments,
+              c.score,
+              c.over_18,
+              c.controversiality,
+              c.body,
+              c.link_title,
+              c.downs,
+              c.is_submitter,
+              c.subreddit,
+              c.num_reports,
+              c.created_utc,
+              c.quarantine,
+              c.subreddit_type,
+              c.ups,
+              profile.isBot
+            ]
+
+            dbQ.push({ comment })
+          })
+        })
       })
     }
 
