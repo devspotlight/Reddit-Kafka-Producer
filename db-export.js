@@ -21,7 +21,7 @@ async function main () {
         author_has_verified_email boolean,
         subreddit_id text,
         approved_at_utc integer,
-        edited boolean,
+        edited integer,
         mod_reason_by text,
         banned_by text,
         author_flair_type text,
