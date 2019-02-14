@@ -192,7 +192,7 @@ async function main () {
 
     function loop () {
       console.log('looped')
-      cursor.read(100, (err, rows) => {
+      cursor.read(50, (err, rows) => {
         if (err) throw err
 
         if (rows.length === 0) {
