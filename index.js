@@ -53,7 +53,6 @@ async function main () {
       const isBot = l[1] === 'TRUE'
       const isTroll = l[2] === 'TRUE'
 
-      console.log(username, isBot, isTroll)
       redditQ.push({
         fn: scraper.scrapeProfile.bind(scraper),
         username,
