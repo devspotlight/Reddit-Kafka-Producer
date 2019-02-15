@@ -17,7 +17,7 @@ async function main () {
     const createTableText = `
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-      CREATE TABLE IF NOT EXISTS profiles (
+      CREATE TABLE IF NOT EXISTS profiles2 (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         data JSON
       );
@@ -27,12 +27,12 @@ async function main () {
 
     const dbQ = queue(async (profile , cb) => {
       console.log('inserting', profile.name)
-      await pool.query('INSERT INTO profiles(data) VALUES($1)', [profile])
+      await pool.query('INSERT INTO profiles2(data) VALUES($1)', [profile])
       cb()
     })
 
-    const redditQ = queue(async ({ fn, username }, cb) => {
-      const profile = await fn(username)
+    const redditQ = queue(async ({ fn, username, isBot, isTroll }, cb) => {
+      const profile = await fn(username, isBot, isTroll)
 
       if (!profile.error) {
         dbQ.push(profile)
@@ -48,8 +48,18 @@ async function main () {
     })
 
     lines.on('line', line => {
-      const username = line.split(',')[0]
-      redditQ.push({ fn: scraper.scrapeProfile.bind(scraper), username })
+      const l = line.split(',')
+      const username = l[0]
+      const isBot = l[1] === 'TRUE'
+      const isTroll = l[2] === 'TRUE'
+
+      console.log(username, isBot, isTroll)
+      redditQ.push({
+        fn: scraper.scrapeProfile.bind(scraper),
+        username,
+        isBot,
+        isTroll
+      })
     })
   } catch (e) {
     console.log(e)
