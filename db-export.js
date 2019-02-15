@@ -95,7 +95,8 @@ async function main () {
         quarantine,
         subreddit_type,
         ups,
-        is_bot
+        is_bot,
+        is_troll
       ) VALUES (
         $1,
         $2,
