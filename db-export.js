@@ -185,14 +185,15 @@ async function main () {
           c.quarantine,
           c.subreddit_type,
           c.ups,
-          profile.isBot
+          profile.isBot,
+          profile.isTroll
         ]
 
         dbQ.push({ comment })
       })
     }
 
-    const cursor = client.query(new Cursor('select * from profiles'))
+    const cursor = client.query(new Cursor('select * from profiles2'))
 
     function loop () {
       cursor.read(10, (err, rows) => {
