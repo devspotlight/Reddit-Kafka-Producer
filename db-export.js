@@ -140,7 +140,11 @@ async function main () {
 
     const dbQ = queue(async ({ comment }, cb) => {
       console.log('inserting', comment[20])
-      await pool.query(insertQuery, comment)
+      try {
+        await pool.query(insertQuery, comment)
+      } catch (e) {
+        console.log(e)
+      }
       cb()
     })
 
