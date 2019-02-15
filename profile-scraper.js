@@ -5,7 +5,7 @@ const axios = require('axios')
 function ProfileScraper () {}
 
 ProfileScraper.prototype.fetchProfile = async function (username) {
-  await new Promise(resolve => setTimeout(resolve, 500))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   try {
     const path = `https://www.reddit.com/${username}/about.json`
@@ -17,7 +17,7 @@ ProfileScraper.prototype.fetchProfile = async function (username) {
 }
 
 ProfileScraper.prototype.fetchComments = async function (username, after) {
-  await new Promise(resolve => setTimeout(resolve, 500))
+  await new Promise(resolve => setTimeout(resolve, 1000))
 
   try {
     console.log(username, after)
