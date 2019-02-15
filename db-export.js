@@ -154,55 +154,59 @@ async function main () {
 
       console.log('handling ', profile.name)
 
-      comments.forEach((c) => {
-        const comment = [
-          profile.link_karma,
-          profile.comment_karma,
-          profile.created_utc,
-          profile.verified,
-          profile.has_verified_email,
-          c.subreddit_id,
-          c.approved_at_utc,
-          c.edited || 0,
-          c.mod_reason_by,
-          c.banned_by,
-          c.author_flair_type,
-          c.removal_reason,
-          c.link_id,
-          c.author_flair_template_id,
-          c.likes,
-          c.banned_at_utc,
-          c.mod_reason_title,
-          c.gilded,
-          c.archived,
-          c.no_follow,
-          c.author,
-          c.num_comments,
-          c.score,
-          c.over_18,
-          c.controversiality,
-          c.body,
-          c.link_title,
-          c.downs,
-          c.is_submitter,
-          c.subreddit,
-          c.num_reports,
-          c.created_utc,
-          c.quarantine,
-          c.subreddit_type,
-          c.ups,
-          profile.isBot,
-          profile.isTroll
-        ]
+      if (comments && comments.length > 0) {
+        comments.forEach((c) => {
+          const comment = [
+            profile.link_karma,
+            profile.comment_karma,
+            profile.created_utc,
+            profile.verified,
+            profile.has_verified_email,
+            c.subreddit_id,
+            c.approved_at_utc,
+            c.edited || 0,
+            c.mod_reason_by,
+            c.banned_by,
+            c.author_flair_type,
+            c.removal_reason,
+            c.link_id,
+            c.author_flair_template_id,
+            c.likes,
+            c.banned_at_utc,
+            c.mod_reason_title,
+            c.gilded,
+            c.archived,
+            c.no_follow,
+            c.author,
+            c.num_comments,
+            c.score,
+            c.over_18,
+            c.controversiality,
+            c.body,
+            c.link_title,
+            c.downs,
+            c.is_submitter,
+            c.subreddit,
+            c.num_reports,
+            c.created_utc,
+            c.quarantine,
+            c.subreddit_type,
+            c.ups,
+            profile.isBot,
+            profile.isTroll
+          ]
 
-        dbQ.push({ comment })
-      })
+          dbQ.push({ comment })
+        })
+      }
     }
 
     const cursor = client.query(new Cursor('select * from profiles2'))
 
     function loop () {
+      console.log('loop')
       cursor.read(10, (err, rows) => {
+        console.log('cursor')
         if (err) throw err
 
         if (rows.length === 0) {
@@ -213,6 +217,10 @@ async function main () {
         }
 
         rows.forEach(handleRow)
+
+        if (dbQ.length() === 0) {
+          loop()
+        }
       })
     }
 
