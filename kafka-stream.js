@@ -1,4 +1,4 @@
-/* global process, require, setTimeout */
+/* global process, require, setInterval, clearInterval */
 
 const fs = require('fs')
 
@@ -12,11 +12,9 @@ const formatComment = require('./format-comment')
 require('dotenv').config()
 
 async function fetchSubreddit (subreddit, cb, after) {
-  await new Promise(resolve => setTimeout(resolve, 1000))
-
   try {
     console.log(subreddit)
-    let path = `https://www.reddit.com/r/${subreddit}/comments.json`
+    let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
 
     if (typeof after !== 'undefined') {
       path = `${path}?after=${after}`
@@ -25,10 +23,6 @@ async function fetchSubreddit (subreddit, cb, after) {
     const response = await axios.get(path)
     const { data } = response.data
     data.children.forEach(comment => cb(comment.data))
-
-    // if (data.after !== null) {
-    //   return fetchSubreddit(subreddit, cb, after)
-    // }
 
     return {}
   } catch (error) {
@@ -63,28 +57,40 @@ async function main () {
           partition: 0,
           message
         })
+        console.log('sent', message.author)
         cb()
       } catch (e) {
         console.log(e)
         cb()
       }
-    })
+    }, 10)
 
     await producer.init()
     console.log('connected!')
 
-    fetchSubreddit('politics', async (c) => {
-      const author = c.author
-      const profile = await scraper.fetchProfile(`u/${author}`)
+    let interval
 
-      console.log(author)
+    const stream = () => {
+      if (q.length() > 500) {
+        clearInterval(interval)
+        q.drain = () => {
+          console.log('new interval')
+          interval = setInterval(stream, 1000)
+        }
+      } else {
+        fetchSubreddit('politics', async (c) => {
+          const author = c.author
+          const profile = await scraper.fetchProfile(`u/${author}`)
+          const comment = formatComment(profile, c)
 
-      const comment = formatComment(profile, c)
-
-      if (!profile.error) {
-        q.push(comment)
+          if (!profile.error) {
+            q.push(comment)
+          }
+        })
       }
-    })
+    }
+
+    interval = setInterval(stream, 1000)
   } catch (e) {
     console.log(e)
   }
