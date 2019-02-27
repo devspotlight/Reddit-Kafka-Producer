@@ -1,4 +1,4 @@
-/* global process, require, setInterval, clearInterval */
+/* global process, require, setTimeout, setInterval, clearInterval */
 
 const fs = require('fs')
 
@@ -51,19 +51,21 @@ async function main () {
     const scraper = new ProfileScraper()
 
     const q = queue(async (message, cb) => {
-      try {
-        await producer.send({
-          topic: 'reddit-comments',
-          partition: 0,
-          message
-        })
-        console.log('sent', message.author)
-        cb()
-      } catch (e) {
-        console.log(e)
-        cb()
-      }
-    }, 10)
+      setTimeout(async () => {
+        try {
+          await producer.send({
+            topic: 'northcanadian-72923.reddit-comments',
+            partition: 0,
+            message
+          })
+          console.log('sent', message.author)
+          cb()
+        } catch (e) {
+          console.log(e)
+          cb()
+        }
+      }, 500)
+    }, 1)
 
     await producer.init()
     console.log('connected!')
@@ -85,6 +87,8 @@ async function main () {
 
           if (!profile.error) {
             q.push(comment)
+          } else {
+            console.log(profile.error)
           }
         })
       }
