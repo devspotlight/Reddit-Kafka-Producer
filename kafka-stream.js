@@ -56,7 +56,9 @@ async function main () {
           await producer.send({
             topic: 'northcanadian-72923.reddit-comments',
             partition: 0,
-            message
+            message: {
+              value: JSON.stringify(message)
+            }
           })
           console.log('sent', message.author)
           cb()
