@@ -35,7 +35,6 @@ async function fetchSubreddit (subreddit, cb, after) {
 
 async function main () {
   try {
-
     const pool = new Pool()
 
     const createTableText = `
@@ -49,7 +48,7 @@ async function main () {
 
     await pool.query(createTableText)
 
-    const dbQ = queue(async (profile , cb) => {
+    const dbQ = queue(async (profile, cb) => {
       console.log('inserting', profile.name)
       await pool.query('INSERT INTO profiles(data) VALUES($1)', [profile])
       cb()
@@ -68,7 +67,6 @@ async function main () {
         dbQ.push(profile)
       }
     })
-
   } catch (e) {
     console.log(e)
   }

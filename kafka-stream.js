@@ -33,15 +33,15 @@ async function fetchSubreddit (subreddit, cb, after) {
 async function main () {
   try {
     const cert = process.env.KAFKA_CLIENT_CERT
-    const key  = process.env.KAFKA_CLIENT_CERT_KEY
-    const url  = process.env.KAFKA_URL
+    const key = process.env.KAFKA_CLIENT_CERT_KEY
+    const url = process.env.KAFKA_URL
 
-    fs.writeFileSync('./client.crt', process.env.KAFKA_CLIENT_CERT)
-    fs.writeFileSync('./client.key', process.env.KAFKA_CLIENT_CERT_KEY)
+    fs.writeFileSync('./client.crt', cert)
+    fs.writeFileSync('./client.key', key)
 
     const producer = new Kafka.Producer({
       clientId: 'reddit-comment-producer',
-      connectionString: url.replace(/\+ssl/g,''),
+      connectionString: url.replace(/\+ssl/g, ''),
       ssl: {
         certFile: './client.crt',
         keyFile: './client.key'

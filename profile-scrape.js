@@ -25,7 +25,7 @@ async function main () {
 
     await pool.query(createTableText)
 
-    const dbQ = queue(async (profile , cb) => {
+    const dbQ = queue(async (profile, cb) => {
       console.log('inserting', profile.name)
       try {
         await pool.query('INSERT INTO profiles2(data) VALUES($1)', [profile])

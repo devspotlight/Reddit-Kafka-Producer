@@ -148,7 +148,7 @@ async function main () {
       cb()
     })
 
-    function handleRow (row) {
+    const handleRow = (row) => {
       const profile = row.data
       const comments = profile.comments
 
@@ -203,7 +203,7 @@ async function main () {
 
     const cursor = client.query(new Cursor('select * from profiles2'))
 
-    function loop () {
+    const loop = () => {
       console.log('loop')
       cursor.read(10, (err, rows) => {
         console.log('cursor')
