@@ -4,6 +4,8 @@ const { Pool } = require('pg')
 const Cursor = require('pg-cursor')
 const queue = require('async.queue')
 
+const formatComment = require('./format-comment')
+
 require('dotenv').config()
 
 async function main () {
@@ -156,47 +158,8 @@ async function main () {
 
       if (comments && comments.length > 0) {
         comments.forEach((c) => {
-          const comment = [
-            profile.link_karma,
-            profile.comment_karma,
-            profile.created_utc,
-            profile.verified,
-            profile.has_verified_email,
-            c.subreddit_id,
-            c.approved_at_utc,
-            c.edited || 0,
-            c.mod_reason_by,
-            c.banned_by,
-            c.author_flair_type,
-            c.removal_reason,
-            c.link_id,
-            c.author_flair_template_id,
-            c.likes,
-            c.banned_at_utc,
-            c.mod_reason_title,
-            c.gilded,
-            c.archived,
-            c.no_follow,
-            c.author,
-            c.num_comments,
-            c.score,
-            c.over_18,
-            c.controversiality,
-            c.body,
-            c.link_title,
-            c.downs,
-            c.is_submitter,
-            c.subreddit,
-            c.num_reports,
-            c.created_utc,
-            c.quarantine,
-            c.subreddit_type,
-            c.ups,
-            profile.isBot,
-            profile.isTroll
-          ]
-
-          dbQ.push({ comment })
+          const comment = formatComment(profile, c)
+          dbQ.push({ comment: Object.values(comment) })
         })
       }
     }
@@ -204,9 +167,8 @@ async function main () {
     const cursor = client.query(new Cursor('select * from profiles2'))
 
     const loop = () => {
-      console.log('loop')
       cursor.read(10, (err, rows) => {
-        console.log('cursor')
+        console.log('next cursor')
         if (err) throw err
 
         if (rows.length === 0) {

@@ -12,7 +12,7 @@ async function fetchSubreddit (subreddit, cb, after) {
   await new Promise(resolve => setTimeout(resolve, 1000))
 
   try {
-    console.log(subreddit)
+    console.log('fetching', subreddit)
     let path = `https://www.reddit.com/r/${subreddit}/comments.json`
 
     if (typeof after !== 'undefined') {

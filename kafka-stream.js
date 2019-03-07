@@ -13,7 +13,7 @@ require('dotenv').config()
 
 async function fetchSubreddit (subreddit, cb, after) {
   try {
-    console.log(subreddit)
+    console.log('fetching', subreddit)
     let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
 
     if (typeof after !== 'undefined') {
@@ -78,7 +78,6 @@ async function main () {
       if (q.length() > 500) {
         clearInterval(interval)
         q.drain = () => {
-          console.log('new interval')
           interval = setInterval(stream, 1000)
         }
       } else {
