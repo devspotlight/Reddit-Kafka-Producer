@@ -1,3 +1,7 @@
+/**
+ * A function for formatting JSON response data.
+ */
+
 /* global module */
 
 module.exports = function formatComment (profile, comment) {
@@ -7,7 +11,7 @@ module.exports = function formatComment (profile, comment) {
     author_created_at: profile.created_utc,
     author_verified: profile.verified,
     author_has_verified_email: profile.has_verified_email,
-    subreddit_it: comment.subreddit_id,
+    subreddit_id: comment.subreddit_id,
     approved_at_utc: comment.approved_at_utc,
     edited: comment.edited || 0,
     mod_reason_by: comment.mod_reason_by,
