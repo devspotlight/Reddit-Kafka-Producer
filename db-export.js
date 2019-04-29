@@ -1,4 +1,9 @@
-/* global process, require, setTimeout */
+/**
+ * 3. Inserts JSON data to a table with a schema.
+ * To run as a script (once, when needed).
+ */
+
+/* global process, require */
 
 const { Pool } = require('pg')
 const Cursor = require('pg-cursor')
@@ -10,9 +15,11 @@ require('dotenv').config()
 
 async function main () {
   try {
+    // Connects to Potsgres using default env vars. See https://node-postgres.com/features/connecting
     const pool = new Pool()
     const client = await pool.connect()
-
+    // If needed, adds pgcrypto extension to the db (https://www.postgresql.org/docs/current/pgcrypto.html)
+    // and creates `comments` table.
     const createTableText = `
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -57,9 +64,9 @@ async function main () {
         is_troll boolean
       );
     `
-
     await client.query(createTableText)
 
+    // SQL query to insert data to the `comments` table created above.
     const insertQuery = `
       INSERT INTO comments(
         author_link_karma,
@@ -140,56 +147,80 @@ async function main () {
       )
     `
 
-    const dbQ = queue(async ({ comment }, cb) => {
-      console.log('inserting', comment[20])
-      try {
-        await pool.query(insertQuery, comment)
-      } catch (e) {
-        console.log(e)
-      }
-      cb()
-    })
+    /* Queue to insert a comment to the db. */
+    const dbQ = queue(
+      /**
+       * `dbQ` worker to insert `comment` data to the db according to `insertQuery`.
+       * @param comment
+       * @param cb
+       * @returns {Promise<void>}
+       */
+      async ({ comment }, cb) => {
+        console.info('db-export.js: inserting', comment[20])
+        try {
+          await pool.query(insertQuery, comment)
+        } catch (e) {
+          console.error('db-export.js dbQ: comment insertion error!', e)
+        }
+        cb()
+      })
 
+    /**
+     * Fn to handle a row from the `profiles2` table
+     * Uses `dbQ` to to the db.
+     * @param row record with {data, comments}
+     */
     const handleRow = (row) => {
       const profile = row.data
       const comments = profile.comments
 
-      console.log('handling ', profile.name)
-
+      console.info('db-export.js: handling ', profile.name)
       if (comments && comments.length > 0) {
-        comments.forEach((c) => {
-          const comment = formatComment(profile, c)
-          dbQ.push({ comment: Object.values(comment) })
+        comments.forEach((comment) => {
+          const fullComment = formatComment(profile, comment)
+          dbQ.push({ comment: Object.values(fullComment) })
         })
       }
     }
 
-    const cursor = client.query(new Cursor('select * from profiles2'))
+    /* Db cursor to read from `profiles2` table */ // See https://node-postgres.com/api/cursor
+    const cursor = client.query(new Cursor('SELECT * FROM profiles2'))
 
+    /**
+     * Fn to read (all) rows from `profiles2` table
+     */
     const loop = () => {
+      // Reads 10 rows from `profiles2` table.
       cursor.read(10, (err, rows) => {
-        console.log('next cursor')
-        if (err) throw err
+        if (err) {
+          console.error('db-export.js: db loop error!', err)
+          throw err
+        }
+        console.info('db-export.js: next <10 db rows...')
 
         if (rows.length === 0) {
           dbQ.drain = () => {}
-          console.log('done')
+          console.info('db-export.js: all rows processed!')
           client.release()
           return
         }
 
         rows.forEach(handleRow)
 
+        // `loop()` again if the `dbQ` is getting empty.
         if (dbQ.length() === 0) {
           loop()
         }
       })
     }
 
+    // Restarts `loop` when/if `dbQ` gets empty.
     dbQ.drain = loop
+
+    // Starts first `loop` manually.
     loop()
   } catch (e) {
-    console.log(e)
+    console.error('db-export.js: error!', e)
   }
 }
 
