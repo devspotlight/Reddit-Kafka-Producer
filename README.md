@@ -1,25 +1,82 @@
 # Reddit-Kafka-Producer
 
-This repository is a collection of scripts dedicated to scraping comment and
-profile information from the reddit API and streaming it to kafka.
+This repository is a collection of utilities and scripts dedicated to scraping comment and profile information from the reddit API and streaming it to kafka.
 
-- `profile.js`: reads from a CSV file, fetches profile data, and saves to a
-  database.
-- `subreddit.js`: fetches comments and user data from a subreddit and saves to a
-  database.
-- `db-export.js`: inserts JSON data to a table with a schema.
-- `kafka-stream.js`: fetches comments from a subreddit and sends it to kafka.
-- `profile-scraper.js`: a class for accessing data from the reddit API.
-- `format-comment.js`: a function for formatting JSON response data.
+- `profile-scraper.js`: class for accessing data from the Reddit API.
+- `profile.js`: (1) reads from a CSV file, fetches profile data, and saves to a database. (In Procfile.)
+- `subreddit.js`: (2) fetches comments and user data from a subreddit and saves to a database. (In Procfile.)
+- `format-comment.js`: function for formatting JSON response data.
+- `db-export.js`: (3) inserts JSON data to a table with a schema. (In Procfile.)
+- `kafka-stream.js`: (4) fetches comments from a subreddit and sends it to kafka. (Used in Procfile as worker.)
 
-The following environment variables are required for the scripts to run
-properly:
+## Configuration
 
-- `PGHOST`
+The following environment variables are required for the 4 numbered scripts to run
+properly (may use .env file):
+
 - `PGUSER`
-- `PGDATABASE`
 - `PGPASSWORD`
-- `PGPORT`
+- `PGHOST`
+- `PGPORT` (defaults to 5432)
+- `PGDATABASE`
+
+> See https://node-postgres.com/features/connecting
+
+and:
+
 - `KAFKA_CLIENT_CERT`
-- `KAFKA_CLIENT_CERT_KEY`
+- `KAFKA_CLIENT_KEY`
 - `KAFKA_URL`
+
+## Local Development
+
+Create a .env with values for the env vars listed in the previous section.
+
+Install the dependencies:
+
+```console
+npm i
+```
+
+Run scripts 1-3 when needed like:
+
+```console
+node db-export.js
+```
+
+Run main (worker) app:
+
+```console
+npm run worker
+# Same as `node kafka-stream.js` (See Procfile)
+```
+
+> Lint before committing changes:
+> 
+> ```console
+> npm run lint
+> ```
+
+## Deploy on Heroku
+
+Besides the env vars mentioned before, you must set:
+
+```console
+heroku config:set NODE_ENV=production
+```
+
+> Also unpack `DATABASE_URL` e.g. with https://metacpan.org/pod/Env::Heroku ?
+  See https://devcenter.heroku.com/articles/heroku-postgresql#provisioning-heroku-postgres
+
+### Running scripts on Heroku
+This can be achieved with one-off dynos When needed:
+
+```console
+$ heroku run bash
+...
+~ $ node db-export.js
+  ... # Do your thing.
+~ $ exit # when done
+```
+
+> See https://devcenter.heroku.com/articles/one-off-dynos
