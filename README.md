@@ -3,11 +3,11 @@
 This repository is a collection of utilities and scripts dedicated to scraping comment and profile information from the reddit API and streaming it to kafka.
 
 - `profile-scraper.js`: class for accessing data from the Reddit API.
-- `profile.js`: (1) reads from a CSV file, fetches profile data, and saves to a database. (In Procfile.)
-- `subreddit.js`: (2) fetches comments and user data from a subreddit and saves to a database. (In Procfile.)
+- `profile.js`: (1) reads from a CSV file, fetches profile data, and saves to a database.
+- `subreddit.js`: (2) fetches comments and user data from a subreddit and saves to a database.
 - `format-comment.js`: function for formatting JSON response data.
-- `db-export.js`: (3) inserts JSON data to a table with a schema. (In Procfile.)
-- `kafka-stream.js`: (4) fetches comments from a subreddit and sends it to kafka. (Used in Procfile as worker.)
+- `db-export.js`: (3) inserts JSON data to a table with a schema.
+- `kafka-stream.js`: (4) fetches comments from a subreddit and sends it to kafka. (Used in Procfile)
 
 ## Configuration
 
@@ -41,7 +41,7 @@ npm i
 Run scripts 1-3 when needed like:
 
 ```console
-node db-export.js
+node profile.js # or db-export.js
 ```
 
 Run main (worker) app:
@@ -74,7 +74,7 @@ This can be achieved with one-off dynos When needed:
 ```console
 $ heroku run bash
 ...
-~ $ node db-export.js
+~ $ node profile.js # or db-export.js
   ... # Do your thing.
 ~ $ exit # when done
 ```

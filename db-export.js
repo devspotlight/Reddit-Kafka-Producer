@@ -1,5 +1,5 @@
 /**
- * 3. Inserts JSON data to a table with a schema.
+ * 3. Inserts JSON data to the database (`comments2` table).
  * To run as a script (once, when needed).
  */
 
@@ -15,15 +15,17 @@ require('dotenv').config()
 
 async function main () {
   try {
+    const NODE_ENV = process.env.NODE_ENV
+
     // Connects to Potsgres using default env vars. See https://node-postgres.com/features/connecting
-    const pool = new Pool()
+    const pool = new Pool({ ssl: true })
     const client = await pool.connect()
     // If needed, adds pgcrypto extension to the db (https://www.postgresql.org/docs/current/pgcrypto.html)
-    // and creates `comments` table.
+    // and creates `comments2` table.
     const createTableText = `
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-      CREATE TABLE IF NOT EXISTS comments (
+      CREATE TABLE IF NOT EXISTS comments2 (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         author_link_karma integer,
         author_comment_karma integer,
@@ -61,14 +63,17 @@ async function main () {
         subreddit_type text,
         ups integer,
         is_bot boolean,
-        is_troll boolean
+        is_troll boolean,
+        recent_comments text
       );
     `
-    await client.query(createTableText)
+    if (NODE_ENV === 'production') {
+      await client.query(createTableText)
+    } else console.info('db-export.js: Would', 'CREATE TABLE IF NOT EXISTS comments2...')
 
-    // SQL query to insert data to the `comments` table created above.
+    // SQL query to insert data to the `comments2` table created above.
     const insertQuery = `
-      INSERT INTO comments(
+      INSERT INTO comments2(
         author_link_karma,
         author_comment_karma,
         author_created_at,
@@ -156,34 +161,19 @@ async function main () {
        * @returns {Promise<void>}
        */
       async ({ comment }, cb) => {
-        console.info('db-export.js: inserting', comment[20])
-        try {
-          await pool.query(insertQuery, comment)
-        } catch (e) {
-          console.error('db-export.js dbQ: comment insertion error!', e)
-        }
+        // console.debug('db-export.js: inserting Object.values of', comment.link_id, comment.recent_comments)
+        if (NODE_ENV === 'production') {
+          try {
+            await pool.query(insertQuery, Object.values(comment))
+          } catch (e) {
+            console.error('db-export.js dbQ: comment insertion error!', e)
+          }
+        } else console.info('db-export.js dbQ: Would', 'INSERT INTO comments2(...', comment.link_id)
         cb()
       })
 
-    /**
-     * Fn to handle a row from the `profiles2` table
-     * Uses `dbQ` to to the db.
-     * @param row record with {data, comments}
-     */
-    const handleRow = (row) => {
-      const profile = row.data
-      const comments = profile.comments
-
-      console.info('db-export.js: handling ', profile.name)
-      if (comments && comments.length > 0) {
-        comments.forEach((comment) => {
-          const fullComment = formatComment(profile, comment)
-          dbQ.push({ comment: Object.values(fullComment) })
-        })
-      }
-    }
-
     /* Db cursor to read from `profiles2` table */ // See https://node-postgres.com/api/cursor
+    console.info('db-export.js: Querying', 'SELECT * FROM profiles2')
     const cursor = client.query(new Cursor('SELECT * FROM profiles2'))
 
     /**
@@ -191,27 +181,62 @@ async function main () {
      */
     const loop = () => {
       // Reads 10 rows from `profiles2` table.
-      cursor.read(10, (err, rows) => {
-        if (err) {
-          console.error('db-export.js: db loop error!', err)
-          throw err
-        }
-        console.info('db-export.js: next <10 db rows...')
+      cursor.read(
+        10,
+        /**
+         * Anon callback to process each 10 rows read from `profiles2`
+         * @param err
+         * @param rows
+         */
+        (err, rows) => {
+          if (err) {
+            console.error('db-export.js loop: error!', err)
+            throw err
+          }
+          console.info('db-export.js loop: next ≤10 rows from profiles2 table...')
 
-        if (rows.length === 0) {
-          dbQ.drain = () => {}
-          console.info('db-export.js: all rows processed!')
-          client.release()
-          return
-        }
+          // Finishes whole script when all rows are processed.
+          if (rows.length === 0) {
+            dbQ.drain = () => {}
+            console.info('db-export.js loop: all rows processed!')
+            client.release()
+            return
+          }
 
-        rows.forEach(handleRow)
+          // Constructs `comments` from each profile `row` and inserts each it into the `comments2` table.
+          rows.forEach((row) => {
+            const profile = row.data
+            const comments = profile.comments
 
-        // `loop()` again if the `dbQ` is getting empty.
-        if (dbQ.length() === 0) {
-          loop()
-        }
-      })
+            let recentComments = [] // Start a data queue
+
+            // console.debug('db-export.js loop forEach row: transforming', profile.name, 'into full comment')
+            if (comments && comments.length > 0) {
+              /* Nested forEach */
+              comments.forEach((comment) => {
+                let fullComment = formatComment(profile, comment)
+
+                // Attach last ≤20 user comment Reddit ids to this comment.
+                fullComment.recent_comments = JSON.stringify(recentComments)
+
+                // console.debug(
+                //   'db-export.js loop forEach row > forEach comment: fullComment [ link_id, recent_comments ]',
+                //   [fullComment.link_id, fullComment.recent_comments]
+                // )
+                dbQ.push({ comment: fullComment })
+
+                // Keeps recentComments data queue at length 20.
+                recentComments.push(comment.link_id)
+                if (recentComments.length > 20) recentComments.shift()
+              })
+            }
+          })
+
+          // `loop()` again if the `dbQ` is getting empty.
+          if (dbQ.length() === 0) {
+            loop()
+          }
+        })
     }
 
     // Restarts `loop` when/if `dbQ` gets empty.
