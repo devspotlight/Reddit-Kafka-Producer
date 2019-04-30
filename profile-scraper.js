@@ -21,7 +21,7 @@ ProfileScraper.prototype.fetchProfile = async function (username) {
   // await new Promise(resolve => setTimeout(resolve, 100))
 
   try {
-    const path = `https://www.reddit.com/${username}/about.json`
+    const path = `https://www.reddit.com/user/${username}/about.json`
     const response = await axios.get(path)
     return response.data.data
   } catch (error) {
@@ -42,8 +42,8 @@ ProfileScraper.prototype.fetchComments = async function (username, after) {
 
   // Fetches reddit.com/${username}/comments.json (https://www.reddit.com/dev/api#GET_user_{username}_{where} ?)
   try {
-    console.debug('ProfileScraper.fetchComments for', username, 'after', after)
-    let path = `https://www.reddit.com/${username}/comments.json`
+    console.debug('ProfileScraper.fetchComments: for', username, 'after', after)
+    let path = `https://www.reddit.com/user/${username}/comments.json`
 
     if (typeof after !== 'undefined') {
       path += `?after=${after}`
@@ -61,6 +61,7 @@ ProfileScraper.prototype.fetchComments = async function (username, after) {
 
     // Returns the comments when there's no more ones left to fetch.
     if (data.after === null) {
+      console.debug('ProfileScraper.fetchComments: (', username, ') got', comments.length)
       return comments
     }
 

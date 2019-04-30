@@ -85,12 +85,12 @@ async function main () {
       'politics',
       /**
        * Async callback to process 'politics' subreddit comment data.
-       * Fetches comment author's profile data before queueing it to be insterted to db.
+       * Fetches comment author's profile data before queueing it to be inserted to db.
        * @param comment
        * @returns {Promise<void>}
        */
       async (comment) => {
-        const profile = await scraper.fetchProfile(`u/${comment.author}`)
+        const profile = await scraper.fetchProfile(comment.author)
 
         profile.comments = [ comment ]
         profile.isBot = false

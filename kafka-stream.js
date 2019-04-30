@@ -16,6 +16,8 @@ const formatComment = require('./format-comment')
 
 require('dotenv').config()
 
+// TODO: Use if (NODE_ENV === 'production') {...
+
 /**
  * Async fn to fetch 100 comments from `subreddit`
  * @param subreddit to fetch
@@ -128,7 +130,7 @@ async function main () {
            * @returns {Promise<void>}
            */
           async (comment) => {
-            const profile = await scraper.fetchProfile(`u/${comment.author}`)
+            const profile = await scraper.fetchProfile(comment.author)
             const fullComment = formatComment(profile, comment)
 
             if (profile.error) {
