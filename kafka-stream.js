@@ -52,15 +52,17 @@ async function fetch100Subreddit (subreddit, cb, after) {
 }
 
 async function main () {
-  // try {
+  try {
     // Loads env vars with info for connecting to Kafka.
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_KEY
+    console.debug('consts')
 
     // Overwrites local files to use as Kafka credentials.
     fs.writeFileSync('./client.crt', cert)
     fs.writeFileSync('./client.key', key)
+    console.debug('fs.writeFileSyncs')
 
     // Creates Kafka producer.
     const producer = new Kafka.Producer({
@@ -71,9 +73,7 @@ async function main () {
         keyFile: './client.key'
       }
     })
-
-    // Creates a ProfileScraper.
-    const scraper = new ProfileScraper()
+    console.debug('Created Kafka producer')
 
     /* Queue to send comments to Kafka topic */ // See https://caolan.github.io/async/docs.html#queue
     const q = queue(
@@ -102,11 +102,16 @@ async function main () {
           }
         }, 500)
       }, 1)
+    console.debug('q defined')
 
     await producer.init()
     console.info('worker: Connected to Kafka at', process.env.KAFKA_URL)
+    console.debug('producer.init()')
 
     let interval
+
+    // Creates a ProfileScraper.
+    const scraper = new ProfileScraper()
 
     /**
      * Fn (to be ran at interval) for
@@ -142,12 +147,14 @@ async function main () {
           })
       }
     }
+    console.debug('stream defined')
 
     // Starts the 1s interval.
     interval = setInterval(stream, 1000)
-  // } catch (e) {
-  //   console.error('worker error!', e)
-  // }
+    console.debug('interval started!')
+  } catch (e) {
+    console.error('worker error!', e)
+  }
 }
 
 main()
