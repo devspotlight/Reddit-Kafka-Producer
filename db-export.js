@@ -64,7 +64,8 @@ async function main () {
         ups integer,
         is_bot boolean,
         is_troll boolean,
-        recent_comments text
+        recent_comments JSON
+        is_training boolean
       );
     `
     if (NODE_ENV === 'production') {
@@ -110,7 +111,8 @@ async function main () {
         subreddit_type,
         ups,
         is_bot,
-        is_troll
+        is_troll,
+        recent_comments
       ) VALUES (
         $1,
         $2,
@@ -148,7 +150,8 @@ async function main () {
         $34,
         $35,
         $36,
-        $37
+        $37,
+        $38
       )
     `
 
@@ -215,6 +218,10 @@ async function main () {
               /* Nested forEach */
               comments.forEach((comment) => {
                 let fullComment = formatComment(profile, comment)
+
+                // Set is_bot and is_troll (coming originally from bots.csv)
+                fullComment.is_bot = comment.isBot
+                fullComment.is_troll = comment.isTroll
 
                 // Attach last ≤20 user comment Reddit ids to this comment.
                 fullComment.recent_comments = JSON.stringify(recentComments)

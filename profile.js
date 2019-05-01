@@ -37,7 +37,7 @@ async function main () {
 
     // Queues https://caolan.github.io/async/docs.html#queue
 
-    /* Queue to insert scraped profile to db */
+    /* Queue to insert scraped `profile` to db */
     const dbQ = queue(async (profile, cb) => {
       console.debug('profile.js dbQ worker: inserting profile for', profile.name)
 
@@ -51,11 +51,16 @@ async function main () {
       cb()
     })
 
-    /* Queue to scrape a Reddit user profile (calls dbQ queue) */
-    const redditQ = queue(async ({ scrape, username, isBot, isTroll }, cb) => {
+    // Creates a ProfileScraper.
+    const scraper = new ProfileScraper()
+
+    /* Queue to scrape a Reddit user profile
+     * (awaits scraper.scrapeProfile which calls the Reddit API)
+     * and queues the profile into `dbQ` */
+    const redditQ = queue(async ({ username, isBot, isTroll }, cb) => {
       console.debug('profile.js redditQ worker: scraping profile for', username)
 
-      const profile = await scrape(username, isBot, isTroll)
+      const profile = await scraper.scrapeProfile(username, isBot, isTroll)
 
       if (profile.error) {
         console.error('profile.js redditQ worker: error!', profile.error)
@@ -65,9 +70,6 @@ async function main () {
 
       cb()
     })
-
-    // Creates a ProfileScraper.
-    const scraper = new ProfileScraper()
 
     // Opens bots.csv file.
     const lines = readline.createInterface({
@@ -83,7 +85,6 @@ async function main () {
 
       // Queues scraping of each Reddit user profile.
       redditQ.push({
-        scrape: scraper.scrapeProfile.bind(scraper),
         username,
         isBot,
         isTroll
