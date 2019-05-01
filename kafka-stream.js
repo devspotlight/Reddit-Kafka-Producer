@@ -52,7 +52,7 @@ async function fetch100Subreddit (subreddit, cb, after) {
 }
 
 async function main () {
-  try {
+  // try {
     // Loads env vars with info for connecting to Kafka.
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
@@ -145,9 +145,9 @@ async function main () {
 
     // Starts the 1s interval.
     interval = setInterval(stream, 1000)
-  } catch (e) {
-    console.error('worker error!', e)
-  }
+  // } catch (e) {
+  //   console.error('worker error!', e)
+  // }
 }
 
 main()
