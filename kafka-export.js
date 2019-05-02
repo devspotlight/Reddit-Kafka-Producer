@@ -61,6 +61,7 @@ async function main () {
     const kafkaQ = queue(
       /**
        * Async `kafkaQ` worker fn to send each comment to Kafka (via `producer`).
+       * @todo https://github.com/oleksiyk/kafka/blob/master/README.ts.md#batching-grouping-produce-requests
        * @param comment Reddit comment JSON data expected
        * @param cb callback invoked when done
        * @returns {Promise<void>}
@@ -71,21 +72,21 @@ async function main () {
         // Try sending stringified JSON `comment` to Kafka (async fn) after 500 ms.
         if (NODE_ENV === 'production') {
           try {
-            await producer.send({
+            let result = await producer.send({
               topic: 'northcanadian-72923.reddit-comments',
               partition: 0,
               message: { value: JSON.stringify(comment) }
             })
-            console.debug('worker kafkaQ: sent comment', comment.link_id, 'by', comment.author)
+            console.debug('worker kafkaQ: sent comment', comment.link_id, '- [0] offset', result[0].offset)
             cb()
           } catch (e) {
             console.error('kafka-export.js kafkaQ: comment submission error!', e)
             cb()
           }
         } else {
-          console.debug('kafka-export.js kafkaQ: Would send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka', kafkaQ.length())
+          console.debug('kafka-export.js kafkaQ: Would send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
+          cb()
         }
-        cb()
       }, 1)
     console.debug('kafkaQ defined')
 
