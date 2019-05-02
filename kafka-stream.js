@@ -39,7 +39,7 @@ async function fetch100Subreddit (subreddit, each, after) {
     console.debug('fetch100Subreddit: getting', path)
     const response = await axios.get(path)
     const { data } = response.data
-    console.debug('fetch100Subreddit: resp', response)
+    console.debug('fetch100Subreddit: got', data.dist, 'comments')
 
     // Processes each `data.children.data` (comment data) with given callback.
     data.children.forEach(comment => each(comment.data))
@@ -117,10 +117,13 @@ async function main () {
      */
     const stream = () => {
       // If the queue is over 500 elements long, the interval stops.
+      // TODO: What if the API is unavailable? `fetch100Subreddit` will keep running again and again but `q` never grows?
       if (q.length() > 500) {
         clearInterval(interval)
+        console.debug('stream: suspending interval...')
         // Re-starts the interval when the last item from queue `q` has returned from its worker.
         q.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
+          console.debug('stream(): restarting interval.')
           interval = setInterval(stream, 1000)
         }
       } else {
@@ -128,19 +131,20 @@ async function main () {
         fetch100Subreddit(
           'politics',
           /**
-               * Async callback to process each comment in the 'politics' subreddit.
+           * Async callback to process each comment in the 'politics' subreddit.
            * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
            * @param comment
            * @returns {Promise<void>}
            */
           async (comment) => {
-            console.debug("fetch100Subreddit('politics') callback: processing", comment.link_id)
+            // console.debug("stream fetch100Subreddit('politics') callback: processing", comment.link_id)
             const profile = await scraper.fetchProfile(comment.author)
-            const fullComment = formatComment(profile, comment)
 
             if (profile.error) {
-              console.error("fetch100Subreddit('politics') callback: error!", profile.error)
+              console.error("stream fetch100Subreddit('politics') callback: error!", profile.error)
             } else {
+              const fullComment = formatComment(profile, comment)
+
               // Pushes `comment` task to `q` queue (to be sent as message to Kafka).
               q.push(fullComment)
             }
