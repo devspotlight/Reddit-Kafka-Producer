@@ -21,12 +21,12 @@ require('dotenv').config()
 /**
  * Async fn to fetch 100 comments from `subreddit`
  * @param subreddit to fetch
- * @param cb callback to process each subreddit comment data
+ * @param each callback to process each subreddit comment data
  * @param after has no effect (optional)
  * @todo remove ^
  * @returns {Promise<*>} empty object `{}` or { error }
  */
-async function fetch100Subreddit (subreddit, cb, after) {
+async function fetch100Subreddit (subreddit, each, after) {
   // Fetches reddit.com/${subreddit}/comments.json?limit=100
   try {
     console.debug('fetch100Subreddit: fetching', subreddit)
@@ -36,11 +36,13 @@ async function fetch100Subreddit (subreddit, cb, after) {
       path += `?after=${after}`
     }
 
+    console.debug('fetch100Subreddit: getting', path)
     const response = await axios.get(path)
     const { data } = response.data
+    console.debug('fetch100Subreddit: resp', response)
 
     // Processes each `data.children.data` (comment data) with given callback.
-    data.children.forEach(comment => cb(comment.data))
+    data.children.forEach(comment => each(comment.data))
 
     // Returns `{}`.
     return {}
@@ -80,7 +82,7 @@ async function main () {
       /**
        * `q` worker
        * @param message Reddit comment JSON data expected
-       * @param cb callback to process comment data
+       * @param cb callback invoked when done
        * @returns {Promise<void>}
        */
       async (message, cb) => {
@@ -90,9 +92,7 @@ async function main () {
             await producer.send({
               topic: 'northcanadian-72923.reddit-comments',
               partition: 0,
-              message: {
-                value: JSON.stringify(message)
-              }
+              message: { value: JSON.stringify(message) }
             })
             console.debug('worker q: sent comment from', message.author)
             cb()
@@ -106,7 +106,6 @@ async function main () {
 
     await producer.init()
     console.info('worker: Connected to Kafka at', process.env.KAFKA_URL)
-    console.debug('producer.init()')
 
     let interval
 
@@ -120,7 +119,7 @@ async function main () {
       // If the queue is over 500 elements long, the interval stops.
       if (q.length() > 500) {
         clearInterval(interval)
-        // Re-starts the 1s interval when the last item from queue `q` has returned from its worker.
+        // Re-starts the interval when the last item from queue `q` has returned from its worker.
         q.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
           interval = setInterval(stream, 1000)
         }
@@ -129,12 +128,13 @@ async function main () {
         fetch100Subreddit(
           'politics',
           /**
-           * Async callback to process 'politics' subreddit comment data.
+               * Async callback to process each comment in the 'politics' subreddit.
            * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
            * @param comment
            * @returns {Promise<void>}
            */
           async (comment) => {
+            console.debug("fetch100Subreddit('politics') callback: processing", comment.link_id)
             const profile = await scraper.fetchProfile(comment.author)
             const fullComment = formatComment(profile, comment)
 
