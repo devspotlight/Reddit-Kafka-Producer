@@ -5,7 +5,8 @@ This repository is a collection of utilities and scripts dedicated to scraping c
 - `profile-scraper.js`: class for accessing data from the Reddit API.
 - `profile.js`: (1) reads from a CSV file, fetches profile data, and saves to a database.
 - `format-comment.js`: function for formatting JSON response data.
-- `kafka-stream.js`: (2) fetches comments from a subreddit and sends it to kafka. (Used in Procfile)
+- `kafka-export.js`: (2) inserts JSON data to a table with a schema.
+- `kafka-stream.js`: (3) fetches comments from a subreddit and sends it to kafka. (Used in Procfile)
 
 ## Configuration
 
@@ -39,7 +40,7 @@ npm i
 Run scripts 1-3 when needed like:
 
 ```console
-node profile.js
+node profile.js # or kafka-export.js
 ```
 
 Run main (worker) app:
@@ -72,7 +73,7 @@ This can be achieved with one-off dynos When needed:
 ```console
 $ heroku run bash
 ...
-~ $ node profile.js
+~ $ node profile.js # or kafka-export.js
   ... # Do your thing.
 ~ $ exit # when done
 ```
