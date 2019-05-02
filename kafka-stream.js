@@ -83,7 +83,7 @@ async function main () {
       } else {
         fetchSubreddit('politics', async (c) => {
           const author = c.author
-          const profile = await scraper.fetchProfile(`u/${author}`)
+          const profile = await scraper.fetchProfile(author)
           const comment = formatComment(profile, c)
 
           if (!profile.error) {
