@@ -1,8 +1,3 @@
-/**
- * 4. Fetches comments from a subreddit and sends it to kafka.
- * To be ran as a worker.
- */
-
 /* global process, require, setTimeout, setInterval, clearInterval */
 
 const fs = require('fs')
@@ -16,57 +11,34 @@ const formatComment = require('./format-comment')
 
 require('dotenv').config()
 
-// TODO: Use if (NODE_ENV === 'production') {...
-
-/**
- * Async fn to fetch 100 comments from `subreddit`
- * @param subreddit to fetch
- * @param each callback to process each subreddit comment data
- * @param after has no effect (optional)
- * @todo remove ^
- * @returns {Promise<*>} empty object `{}` or { error }
- */
-async function fetch100Subreddit (subreddit, each, after) {
-  // Fetches reddit.com/${subreddit}/comments.json?limit=100
+async function fetchSubreddit (subreddit, cb, after) {
   try {
-    console.debug('fetch100Subreddit: fetching', subreddit)
+    console.log('fetching', subreddit)
     let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
 
     if (typeof after !== 'undefined') {
-      path += `?after=${after}`
+      path = `${path}?after=${after}`
     }
 
-    console.debug('fetch100Subreddit: getting', path)
     const response = await axios.get(path)
     const { data } = response.data
-    console.debug('fetch100Subreddit: got', data.dist, 'comments')
+    data.children.forEach(comment => cb(comment.data))
 
-    // Processes each `data.children.data` (comment data) with given callback.
-    data.children.forEach(comment => each(comment.data))
-
-    // Returns `{}`.
     return {}
-    // TODO: Should skip this?
   } catch (error) {
-    console.error('fetch100Subreddit: error!', error)
     return { error }
   }
 }
 
 async function main () {
   try {
-    // Loads env vars with info for connecting to Kafka.
-    const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
-    const key = process.env.KAFKA_CLIENT_KEY
-    console.debug('consts')
+    const key = process.env.KAFKA_CLIENT_CERT_KEY
+    const url = process.env.KAFKA_URL
 
-    // Overwrites local files to use as Kafka credentials.
     fs.writeFileSync('./client.crt', cert)
     fs.writeFileSync('./client.key', key)
-    console.debug('fs.writeFileSyncs')
 
-    // Creates Kafka producer.
     const producer = new Kafka.Producer({
       clientId: 'reddit-comment-producer',
       connectionString: url.replace(/\+ssl/g, ''),
@@ -75,89 +47,57 @@ async function main () {
         keyFile: './client.key'
       }
     })
-    console.debug('Created Kafka producer')
 
-    /* Queue to send comments to Kafka topic */ // See https://caolan.github.io/async/docs.html#queue
-    const q = queue(
-      /**
-       * `q` worker
-       * @param message Reddit comment JSON data expected
-       * @param cb callback invoked when done
-       * @returns {Promise<void>}
-       */
-      async (message, cb) => {
-        // Sends stringified JSON `message` to Kafka (async fn) after 500 ms.
-        setTimeout(async () => {
-          try {
-            await producer.send({
-              topic: 'northcanadian-72923.reddit-comments',
-              partition: 0,
-              message: { value: JSON.stringify(message) }
-            })
-            console.debug('worker q: sent comment from', message.author)
-            cb()
-          } catch (e) {
-            console.error('worker: error!', e)
-            cb()
-          }
-        }, 500)
-      }, 1)
-    console.debug('q defined')
+    const scraper = new ProfileScraper()
+
+    const q = queue(async (message, cb) => {
+      setTimeout(async () => {
+        try {
+          await producer.send({
+            topic: 'northcanadian-72923.reddit-comments',
+            partition: 0,
+            message: {
+              value: JSON.stringify(message)
+            }
+          })
+          console.log('sent', message.author)
+          cb()
+        } catch (e) {
+          console.log(e)
+          cb()
+        }
+      }, 500)
+    }, 1)
 
     await producer.init()
-    console.info('worker: Connected to Kafka at', process.env.KAFKA_URL)
+    console.log('connected!')
 
     let interval
 
-    // Creates a ProfileScraper.
-    const scraper = new ProfileScraper()
-
-    /**
-     * Fn (to be ran at interval) for
-     */
     const stream = () => {
-      // If the queue is over 500 elements long, the interval stops.
-      // TODO: What if the API is unavailable? `fetch100Subreddit` will keep running again and again but `q` never grows?
       if (q.length() > 500) {
         clearInterval(interval)
-        console.debug('stream: suspending interval...')
-        // Re-starts the interval when the last item from queue `q` has returned from its worker.
-        q.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
-          console.debug('stream(): restarting interval.')
+        q.drain = () => {
           interval = setInterval(stream, 1000)
         }
       } else {
-        // Gets 100 comments from 'politics' subreddit.
-        fetch100Subreddit(
-          'politics',
-          /**
-           * Async callback to process each comment in the 'politics' subreddit.
-           * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
-           * @param comment
-           * @returns {Promise<void>}
-           */
-          async (comment) => {
-            // console.debug("stream fetch100Subreddit('politics') callback: processing", comment.link_id)
-            const profile = await scraper.fetchProfile(comment.author)
+        fetchSubreddit('politics', async (c) => {
+          const author = c.author
+          const profile = await scraper.fetchProfile(`u/${author}`)
+          const comment = formatComment(profile, c)
 
-            if (profile.error) {
-              console.error("stream fetch100Subreddit('politics') callback: error!", profile.error)
-            } else {
-              const fullComment = formatComment(profile, comment)
-
-              // Pushes `comment` task to `q` queue (to be sent as message to Kafka).
-              q.push(fullComment)
-            }
-          })
+          if (!profile.error) {
+            q.push(comment)
+          } else {
+            console.log(profile.error)
+          }
+        })
       }
     }
-    console.debug('stream defined')
 
-    // Starts the 1s interval.
     interval = setInterval(stream, 1000)
-    console.debug('interval started!')
   } catch (e) {
-    console.error('worker error!', e)
+    console.log(e)
   }
 }
 
