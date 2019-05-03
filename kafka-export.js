@@ -19,6 +19,37 @@ require('dotenv').config()
 let wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Async fn to fetch and process comments from `n` Reddit profiles
+ * (previously saved in a db table `profiles2`)
+ * @param client pg connection @todo needed? Maybe its' in cursor.client
+ * @param cursor for pg db connection
+ * @param n how many
+ * @param each callback to process the subreddit comment data
+ * @returns {Promise<*>} empty object `{}` or { error }
+ */
+async function fetchProfiles (client, cursor, n, each) {
+  cursor.read(
+    n,
+    /**
+     * Anon callback to process all comments in these n rows from `profiles2`
+     * @param err
+     * @param rows
+     */
+    (err, rows) => {
+      if (err) {
+        console.error('kafka-export.js fetchProfiles: error!', err)
+        throw err
+      }
+      // console.debug('kafka-export.js fetchProfiles: next', n, 'rows of profiles:\n', rows.map(p => {
+      //   return { name: p.data.name, comments: p.data.comments.length }
+      // }))
+
+      // Processes each profile `row`.
+      rows.forEach(each)
+    })
+}
+
+/**
  * Async main fn allows us to await other async calls
  * i.e. `producer.init()` and `pool.connect()`
  * @returns {Promise<void>}
@@ -90,93 +121,57 @@ async function main () {
       }, 1)
     console.debug('kafkaQ defined')
 
+    let interval
+
+    // // Creates a ProfileScraper.
+    // const scraper = new ProfileScraper()
+
     /**
-     * Fn to read (all) rows from `profiles2` table (10 at a time)
-     * and extract each comment to send to Kafka (with the right structure)
+     * Fn (to be ran at interval) for streaming comments as messages to the Kafka topic
      */
-    const loop10profiles = () => {
-      // Reads 10 rows from `profiles2` table.
-      cursor.read(
-        10,
-        /**
-         * Anon callback to process all comments in these 10 rows from `profiles2`
-         * @param err
-         * @param rows
-         */
-        (err, rows) => {
-          if (err) {
-            console.error('kafka-export.js loop10profiles: error!', err)
-            throw err
+    const stream = () => {
+      // If the queue is over 99 elements long, the interval stops.
+      // TODO: What if the API is unavailable? `fetchProfiles` will keep running again and again but `kafkaQ` never grows?
+      if (kafkaQ.length() > 99) {
+        clearInterval(interval)
+        console.debug('kafka-export.js stream: suspending interval...')
+        // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
+        kafkaQ.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
+          console.debug('kafka-export.js stream: restarting interval.')
+          interval = setInterval(stream, 1000)
+        }
+      } else {
+        // Fetches profiles ONE BY ONE from the db (and all of their comments).
+        fetchProfiles(
+          client,
+          cursor,
+          1,
+          /**
+           * Async callback to process all comments in each project fetched.
+           * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
+           * @param profile
+           * @returns {Promise<void>}
+           */
+          (profile) => {
+            console.debug('kafka-export.js stream fetchProfiles(10) callback: processing profile', profile.data.name, 'with',  profile.data.comments.length, 'comments')
+            const comments = profile.data.comments
+
+            comments.forEach((comment) => {
+              const fullComment = formatComment(profile, comment)
+              // console.debug('kafka-export.js stream fetchProfiles(10) callback: sending', fullComment)
+
+              // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
+              kafkaQ.push(fullComment)
+            })
           }
-          console.info('kafka-export.js loop10profiles: next ≤10 rows of profiles:\n', rows.map(p => {
-            return { name: p.data.name, comments: p.data.comments.length }
-          }))
-
-          // Finishes loop when all rows are processed.
-          if (rows.length === 0) {
-            console.info('kafka-export.js loop10profiles: all rows processed!')
-            kafkaQ.drain = () => {}
-            client.release()
-            return
-          }
-
-          // Constructs `comments` from each profile `row` and inserts each it into the `comments2` table.
-          rows.forEach((row) => {
-            const profile = row.data
-            const comments = profile.comments
-
-            let recentComments = [] // Start a data queue
-
-            // console.debug('kafka-export.js loop10profiles forEach row: transforming', profile.name, 'into full comment')
-            if (comments && comments.length > 0) {
-              /* Nested forEach */
-              comments.forEach((comment) => {
-                let fullComment = formatComment(profile, comment)
-
-                // Sets is_bot and is_troll (coming originally from bots.csv).
-                fullComment.is_bot = comment.isBot
-                fullComment.is_troll = comment.isTroll
-
-                // Attaches last ≤20 user comment Reddit ids to this comment.
-                fullComment.recent_comments = recentComments
-
-                // Marks record as training data.
-                fullComment.is_training = true
-
-                // console.debug(
-                //   'kafka-export.js loop10profiles forEach row > forEach comment: fullComment [ link_id, recent_comments ]',
-                //   [fullComment.link_id, fullComment.recent_comments]
-                // )
-                kafkaQ.push(fullComment)
-
-                // Keeps recentComments data queue at length 20.
-                recentComments.push(comment.link_id)
-                if (recentComments.length > 20) recentComments.shift()
-              })
-            }
-          })
-
-          // Start loop again if the `kafkaQ` is getting empty.
-          console.debug('kafka-export.js loop10profiles: kafkaQ.length()', kafkaQ.length())
-          if (kafkaQ.length() === 0) {
-            console.debug('kafka-export.js loop10profiles: kafkaQ is empty! Restarting loop10profiles()')
-            loop10profiles()
-          }
-        })
+        )
+      }
     }
-    console.debug('loop10profiles defined')
+    console.debug('stream defined')
 
-    // To restart loop when/if `kafkaQ` gets empty
-    if (NODE_ENV === 'production') {
-      kafkaQ.drain = loop10profiles
-      console.debug('kafkaQ.drain = loop10profiles')
-    } else {
-      kafkaQ.drain = () => { console.debug('kafka-export.js loop10profiles: kafkaQ drained.') }
-    }
-
-    // Starts first loop.
-    loop10profiles()
-    console.debug('loop10profiles started!')
+    // Starts the 1s interval.
+    interval = setInterval(stream, 1000)
+    console.debug('interval started!')
   } catch (e) {
     console.error('kafka-export.js: error!', e)
   }

@@ -19,22 +19,16 @@ require('dotenv').config()
 let wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Async fn to fetch 100 comments from `subreddit`
+ * Async fn to fetch and process 100 comments from `subreddit`
  * @param subreddit to fetch
- * @param each callback to process each subreddit comment data
- * @param after has no effect (optional)
- * @todo remove ^
+ * @param each callback to process the subreddit comment data
  * @returns {Promise<*>} empty object `{}` or { error }
  */
-async function fetch100Subreddit (subreddit, each, after) {
+async function fetch100Subreddit (subreddit, each) {
   // Fetches reddit.com/${subreddit}/comments.json?limit=100
   try {
     console.debug('fetch100Subreddit: fetching', subreddit)
     let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
-
-    if (typeof after !== 'undefined') {
-      path += `?after=${after}`
-    }
 
     console.debug('fetch100Subreddit: getting', path)
     const response = await axios.get(path)
@@ -132,7 +126,7 @@ async function main () {
         console.debug('stream: suspending interval...')
         // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
         kafkaQ.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
-          console.debug('stream(): restarting interval.')
+          console.debug('stream: restarting interval.')
           interval = setInterval(stream, 1000)
         }
       } else {
@@ -157,7 +151,8 @@ async function main () {
               // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
               kafkaQ.push(fullComment)
             }
-          })
+          }
+        )
       }
     }
     console.debug('stream defined')
