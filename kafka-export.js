@@ -61,12 +61,11 @@ async function main () {
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_KEY
-    console.debug('consts')
 
     // Connects to Potsgres using default env vars. See https://node-postgres.com/features/connecting
     const pool = new Pool({ ssl: true })
     const client = await pool.connect()
-    console.info('kafka-export.js: Connected to Postgres at', process.env.PGHOST)
+    console.info('kafka-export.js: connected to Postgres at', process.env.PGHOST)
 
     // Creates Kafka producer. (Overwrites local files to use as Kafka credentials.)
     fs.writeFileSync('./client.crt', cert)
@@ -82,10 +81,10 @@ async function main () {
     console.debug('Created Kafka producer')
 
     await producer.init()
-    console.info('kafka-export.js: Connected to Kafka at', process.env.KAFKA_URL)
+    console.info('kafka-export.js: connected to Kafka at', process.env.KAFKA_URL)
 
     /* Db cursor to read from `profiles2` table */ // See https://node-postgres.com/api/cursor
-    console.info('kafka-export.js: Querying', 'SELECT * FROM profiles2')
+    console.info('kafka-export.js: querying', 'SELECT * FROM profiles2')
     const cursor = client.query(new Cursor('SELECT * FROM profiles2'))
 
     /* Queue to insert comments into the db */
@@ -108,14 +107,14 @@ async function main () {
               partition: 0,
               message: { value: JSON.stringify(comment) }
             })
-            console.debug('worker kafkaQ: sent comment', comment.link_id, '- [0] offset', result[0].offset)
+            console.debug('kafka-export.js: producer sent comment', comment.link_id, '- [0] offset', result[0].offset)
             cb()
           } catch (e) {
-            console.error('kafka-export.js kafkaQ: comment submission error!', e)
+            console.error('kafka-export.js: producer submission error!', e)
             cb()
           }
         } else {
-          console.debug('kafka-export.js kafkaQ: Would send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
+          console.debug('kafka-export.js: would produce/send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
           cb()
         }
       }, 1)

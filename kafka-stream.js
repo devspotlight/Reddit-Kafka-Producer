@@ -27,13 +27,13 @@ let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function fetch100Subreddit (subreddit, each) {
   // Fetches reddit.com/${subreddit}/comments.json?limit=100
   try {
-    console.debug('fetch100Subreddit: fetching', subreddit)
+    console.debug('worker: fetching 100 comments from subreddit', subreddit)
     let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
 
-    console.debug('fetch100Subreddit: getting', path)
+    console.debug('worker: requesting', path)
     const response = await axios.get(path)
     const { data } = response.data
-    console.debug('fetch100Subreddit: got', data.dist, 'comments')
+    console.debug('worker: received', data.dist, 'comments')
 
     // Processes each `data.children.data` (comment data) with given callback.
     data.children.forEach(comment => each(comment.data))
@@ -42,7 +42,7 @@ async function fetch100Subreddit (subreddit, each) {
     return {}
     // TODO: Should skip this?
   } catch (error) {
-    console.error('fetch100Subreddit: error!', error)
+    console.error('worker: fetch error!', error)
     return { error }
   }
 }
@@ -59,7 +59,6 @@ async function main () {
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_KEY
-    console.debug('consts')
 
     // Creates Kafka producer. (Overwrites local files to use as Kafka credentials.)
     fs.writeFileSync('./client.crt', cert)
@@ -75,7 +74,7 @@ async function main () {
     console.debug('Created Kafka producer')
 
     await producer.init()
-    console.info('worker: Connected to Kafka at', process.env.KAFKA_URL)
+    console.info('worker: connected to Kafka at', process.env.KAFKA_URL)
 
     /* Queue to send comments to the Kafka topic */ // See https://caolan.github.io/async/docs.html#queue
     const kafkaQ = queue(
@@ -87,7 +86,7 @@ async function main () {
        * @returns {Promise<void>}
        */
       async (comment, cb) => {
-        // console.debug('kafka-stream.js kafkaQ: sending JSON.stringify of', comment.link_id, 'to Kafka')
+        // console.debug('worker: producing JSON.stringify of', comment.link_id, 'for Kafka')
         wait(500)
         // Try sending stringified JSON `comment` to Kafka (async fn) after 500 ms.
         if (NODE_ENV === 'production') {
@@ -97,14 +96,14 @@ async function main () {
               partition: 0,
               message: { value: JSON.stringify(comment) }
             })
-            console.debug('worker kafkaQ: sent comment', comment.link_id, '- [0] offset', result[0].offset)
+            console.debug('worker: Kafka producer sent comment', comment.link_id, '- offset [0]', result[0].offset)
             cb()
           } catch (e) {
-            console.error('kafka-stream.js kafkaQ: comment submission error!', e)
+            console.error('worker: Kafka producer submission error!', e)
             cb()
           }
         } else {
-          console.debug('kafka-export.js kafkaQ: Would send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
+          console.debug('worker: would produce/send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
           cb()
         }
       }, 1)
@@ -123,10 +122,10 @@ async function main () {
       // TODO: What if the API is unavailable? `fetch100Subreddit` will keep running again and again but `kafkaQ` never grows?
       if (kafkaQ.length() > 500) {
         clearInterval(interval)
-        console.debug('stream: suspending interval...')
+        console.debug('worker interval: suspending...')
         // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
         kafkaQ.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
-          console.debug('stream: restarting interval.')
+          console.debug('worker interval: restarting.')
           interval = setInterval(stream, 1000)
         }
       } else {
@@ -140,11 +139,11 @@ async function main () {
            * @returns {Promise<void>}
            */
           async (comment) => {
-            // console.debug("stream fetch100Subreddit('politics') callback: processing", comment.link_id)
+            // console.debug("worker stream: fetch100Subreddit('politics') callback is processing", comment.link_id)
             const profile = await scraper.fetchProfile(comment.author)
 
             if (profile.error) {
-              console.error("stream fetch100Subreddit('politics') callback: error!", profile.error)
+              console.error("worker stream: fetch100Subreddit('politics') callback error!", profile.error)
             } else {
               const fullComment = formatComment(profile, comment)
 
