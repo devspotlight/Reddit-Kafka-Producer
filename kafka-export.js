@@ -19,15 +19,13 @@ require('dotenv').config()
 let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 /**
- * Async fn to fetch and process comments from `n` Reddit profiles
+ * Fetches and queues comments from `n` Reddit profiles
  * (previously saved in a db table `profiles2`)
- * @param client pg connection @todo needed? Maybe its' in cursor.client
  * @param cursor for pg db connection
  * @param n how many
- * @param each callback to process the subreddit comment data
- * @returns {Promise<*>} empty object `{}` or { error }
+ * @param queue to process each comment
  */
-async function fetchProfiles (client, cursor, n, each) {
+function fetchProfiles (cursor, n, queue) {
   cursor.read(
     n,
     /**
@@ -45,7 +43,47 @@ async function fetchProfiles (client, cursor, n, each) {
       // }))
 
       // Processes each profile `row`.
-      rows.forEach(each)
+      rows.forEach(
+        /**
+         * Async callback to process all comments in each profile fetched.
+         * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
+         * @param profile data row from db
+         * @returns {Promise<void>}
+         */
+        (profile) => {
+          console.debug('kafka-export.js: fetchProfiles(10) processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
+          const comments = profile.data.comments
+
+          let recentComments = [] // Start a data queue
+
+          comments.forEach((comment) => {
+            const fullComment = formatComment(profile, comment)
+
+            // Sets is_bot and is_troll (coming originally from bots.csv).
+            fullComment.is_bot = profile.data.isBot
+            fullComment.is_troll = profile.data.isTroll
+
+            // Attaches last ≤20 user comment Reddit ids to this comment.
+            fullComment.recent_comments = recentComments.slice()
+
+            // Marks record as training data.
+            fullComment.is_training = true
+
+            // // console.debug('kafka-export.js: fetchProfiles(10) sending', fullComment)
+            // console.debug(
+            //   'kafka-export.js: forEach row > forEach comment fullComment [ link_id, recent_comments ]',
+            //   [fullComment.link_id, fullComment.recent_comments]
+            // )
+
+            // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
+            queue.push(fullComment)
+
+            // Keeps recentComments data queue at length 20.
+            recentComments.push(comment.link_id)
+            if (recentComments.length > 20) recentComments.shift()
+          })
+        }
+      )
     })
 }
 
@@ -114,16 +152,13 @@ async function main () {
             cb()
           }
         } else {
-          console.debug('kafka-export.js: would produce/send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
+          console.debug('kafka-export.js: would produce/send JSON data for', comment.link_id, 'comment by', comment.author, '- Queue len', kafkaQ.length())
           cb()
         }
       }, 1)
     console.debug('kafkaQ defined')
 
     let interval
-
-    // // Creates a ProfileScraper.
-    // const scraper = new ProfileScraper()
 
     /**
      * Fn (to be ran at interval) for streaming comments as messages to the Kafka topic
@@ -140,30 +175,8 @@ async function main () {
           interval = setInterval(stream, 1000)
         }
       } else {
-        // Fetches profiles ONE BY ONE from the db (and all of their comments).
-        fetchProfiles(
-          client,
-          cursor,
-          1,
-          /**
-           * Async callback to process all comments in each project fetched.
-           * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
-           * @param profile
-           * @returns {Promise<void>}
-           */
-          (profile) => {
-            console.debug('kafka-export.js stream fetchProfiles(10) callback: processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
-            const comments = profile.data.comments
-
-            comments.forEach((comment) => {
-              const fullComment = formatComment(profile, comment)
-              // console.debug('kafka-export.js stream fetchProfiles(10) callback: sending', fullComment)
-
-              // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
-              kafkaQ.push(fullComment)
-            })
-          }
-        )
+        // Fetches profiles from the db (and all of their comments). // TODO: Crashes with n > 1
+        fetchProfiles(cursor, 1, kafkaQ) // NOTE: is async
       }
     }
     console.debug('stream defined')
