@@ -16,7 +16,7 @@ const formatComment = require('./format-comment')
 
 require('dotenv').config()
 
-let wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 /**
  * Async fn to fetch and process comments from `n` Reddit profiles
@@ -153,7 +153,7 @@ async function main () {
            * @returns {Promise<void>}
            */
           (profile) => {
-            console.debug('kafka-export.js stream fetchProfiles(10) callback: processing profile', profile.data.name, 'with',  profile.data.comments.length, 'comments')
+            console.debug('kafka-export.js stream fetchProfiles(10) callback: processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
             const comments = profile.data.comments
 
             comments.forEach((comment) => {

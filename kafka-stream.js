@@ -16,7 +16,7 @@ const formatComment = require('./format-comment')
 
 require('dotenv').config()
 
-let wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 /**
  * Async fn to fetch and process 100 comments from `subreddit`
