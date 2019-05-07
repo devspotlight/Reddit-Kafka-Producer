@@ -3,7 +3,7 @@
  * To run as a script (once, when needed).
  */
 
-/* global process, require */
+/* global process, require, setTimeout, setInterval, clearInterval */
 
 const fs = require('fs')
 
@@ -15,7 +15,13 @@ const Kafka = require('no-kafka')
 const formatComment = require('./format-comment')
 
 require('dotenv').config()
+const NODE_ENV = process.env.NODE_ENV
 
+/**
+ * From https://stackoverflow.com/a/39027151/761963
+ * @param ms milliseconds to wait
+ * @returns {Promise<any>}
+ */
 let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 /**
@@ -26,19 +32,20 @@ let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
  * @param queue to process each comment
  */
 function fetchProfiles (cursor, n, queue) {
+  // console.debug('kafka-export.js: fetchProfiles cursor.text n queue.concurrency', cursor.text, n, queue.concurrency)
   cursor.read(
     n,
     /**
      * Anon callback to process all comments in these n rows from `profiles2`
-     * @param err
+     * @param error
      * @param rows
      */
     (err, rows) => {
       if (err) {
-        console.error('kafka-export.js fetchProfiles: error!', err)
+        console.error('kafka-export.js: fetchProfiles error!', err)
         throw err
       }
-      // console.debug('kafka-export.js fetchProfiles: next', n, 'rows of profiles:\n', rows.map(p => {
+      // console.debug('kafka-export.js: fetchProfiles next', n, 'rows of profiles:\n', rows.map(p => {
       //   return { name: p.data.name, comments: p.data.comments.length }
       // }))
 
@@ -51,7 +58,7 @@ function fetchProfiles (cursor, n, queue) {
          * @returns {Promise<void>}
          */
         (profile) => {
-          console.debug('kafka-export.js: fetchProfiles(10) processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
+          console.debug('kafka-export.js: fetchProfiles x', n, 'processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
           const comments = profile.data.comments
 
           let recentComments = [] // Start a data queue
@@ -63,23 +70,24 @@ function fetchProfiles (cursor, n, queue) {
             fullComment.is_bot = profile.data.isBot
             fullComment.is_troll = profile.data.isTroll
 
-            // Attaches last ≤20 user comment Reddit ids to this comment.
-            fullComment.recent_comments = recentComments.slice()
+            // Attaches (≤20) previous comments by the same author to this comment.
+            let commentsAfterId = recentComments.slice() // data structure
+            fullComment.recent_comments = JSON.stringify(commentsAfterId) // JSON formatted string
 
             // Marks record as training data.
             fullComment.is_training = true
 
-            // // console.debug('kafka-export.js: fetchProfiles(10) sending', fullComment)
+            // // console.debug('kafka-export.js: fetchProfiles x', n, 'sending comment', fullComment)
             // console.debug(
-            //   'kafka-export.js: forEach row > forEach comment fullComment [ link_id, recent_comments ]',
-            //   [fullComment.link_id, fullComment.recent_comments]
+            //   'kafka-export.js: forEach comment link_id fullComment link_id's [ link_id, recent_comments ]',
+            //   [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created: c.created } }]
             // )
 
             // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
             queue.push(fullComment)
 
-            // Keeps recentComments data queue at length 20.
-            recentComments.push(comment.link_id)
+            // Keeps `recentComments` data queue shifting and at max length 20.
+            recentComments.push(comment)
             if (recentComments.length > 20) recentComments.shift()
           })
         }
@@ -94,8 +102,7 @@ function fetchProfiles (cursor, n, queue) {
  */
 async function main () {
   try {
-    // Loads env vars (with info for connecting to Kafka).
-    const NODE_ENV = process.env.NODE_ENV
+    // Loads env vars for connecting to Kafka.
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_KEY
@@ -116,7 +123,6 @@ async function main () {
         keyFile: './client.key'
       }
     })
-    console.debug('Created Kafka producer')
 
     await producer.init()
     console.info('kafka-export.js: connected to Kafka at', process.env.KAFKA_URL)
@@ -135,7 +141,7 @@ async function main () {
        * @returns {Promise<void>}
        */
       async (comment, cb) => {
-        // console.debug('kafka-export.js kafkaQ: sending Object.values of', comment.link_id, 'to Kafka')
+        // console.debug('kafka-export.js: kafkaQ sending Object.values of', comment.link_id, 'to Kafka')
         wait(500)
         // Try sending stringified JSON `comment` to Kafka (async fn) after 500 ms.
         if (NODE_ENV === 'production') {
@@ -145,10 +151,10 @@ async function main () {
               partition: 0,
               message: { value: JSON.stringify(comment) }
             })
-            console.debug('kafka-export.js: producer sent comment', comment.link_id, '- [0] offset', result[0].offset)
+            console.info('kafka-export.js: producer sent comment', comment.link_id, '- [0] offset', result[0].offset)
             cb()
-          } catch (e) {
-            console.error('kafka-export.js: producer submission error!', e)
+          } catch (error) {
+            console.error('kafka-export.js: producer submission error!', error)
             cb()
           }
         } else {
@@ -156,7 +162,6 @@ async function main () {
           cb()
         }
       }, 1)
-    console.debug('kafkaQ defined')
 
     let interval
 
@@ -168,24 +173,24 @@ async function main () {
       // TODO: What if the API is unavailable? `fetchProfiles` will keep running again and again but `kafkaQ` never grows?
       if (kafkaQ.length() > 99) {
         clearInterval(interval)
-        console.debug('kafka-export.js stream: suspending interval...')
+        console.debug('kafka-export.js: suspending interval...')
         // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
         kafkaQ.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
-          console.debug('kafka-export.js stream: restarting interval.')
+          console.debug('kafka-export.js: restarting interval.')
           interval = setInterval(stream, 1000)
         }
       } else {
-        // Fetches profiles from the db (and all of their comments). // TODO: Crashes with n > 1
-        fetchProfiles(cursor, 1, kafkaQ) // NOTE: is async
+        // Fetches profiles from the db and queues all of their comments for the Kafka producer.
+        // TODO: Crashes with n > 1
+        fetchProfiles(cursor, 1, kafkaQ)
+        // TODO: The time interval isn't necessarily effective with `fetchProfiles` because it calls `cursor.read`...
       }
     }
-    console.debug('stream defined')
 
     // Starts the 1s interval.
     interval = setInterval(stream, 1000)
-    console.debug('interval started!')
-  } catch (e) {
-    console.error('kafka-export.js: error!', e)
+  } catch (error) {
+    console.error('kafka-export.js error!', error)
   }
 }
 

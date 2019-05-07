@@ -15,36 +15,85 @@ const ProfileScraper = require('./profile-scraper')
 const formatComment = require('./format-comment')
 
 require('dotenv').config()
-
-let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+const NODE_ENV = process.env.NODE_ENV
 
 /**
- * Async fn to fetch and process 100 comments from `subreddit`
+ * From https://stackoverflow.com/a/39027151/761963
+ * @param ms milliseconds to wait
+ * @returns {Promise<any>}
+ */
+let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+// Creates a ProfileScraper.
+const scraper = new ProfileScraper()
+
+/**
+ * Fetches and process 100 comments from `subreddit`
  * @param subreddit to fetch
  * @param each callback to process the subreddit comment data
- * @returns {Promise<*>} empty object `{}` or { error }
  */
-async function fetch100Subreddit (subreddit, each) {
+function fetch100Subreddit (subreddit, queue) {
+  // console.debug('worker: fetch100Subreddit fetching 100 comments from subreddit', subreddit)
+
   // Fetches reddit.com/${subreddit}/comments.json?limit=100
-  try {
-    console.debug('worker: fetching 100 comments from subreddit', subreddit)
-    let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
+  let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
 
-    console.debug('worker: requesting', path)
-    const response = await axios.get(path)
-    const { data } = response.data
-    console.debug('worker: received', data.dist, 'comments')
+  // console.debug('worker: fetch100Subreddit requesting', path)
+  axios.get(path)
+    .then(
+      /**
+       * Async callback to process each comment in the 'politics' subreddit.
+       * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
+       * @param response from axios.get
+       */
+      (response) => {
+        console.debug('worker: fetch100Subreddit received', response.data.data.dist, 'comments from', subreddit)
 
-    // Processes each `data.children.data` (comment data) with given callback.
-    data.children.forEach(comment => each(comment.data))
+        // Processes each `response.data.data` (comment data) with given callback.
+        response.data.data.children.forEach(async (child) => {
+          const comment = child.data
+          const profile = await scraper.fetchProfile(comment.author)
 
-    // Returns `{}`.
-    return {}
-    // TODO: Should skip this?
-  } catch (error) {
-    console.error('worker: fetch error!', error)
-    return { error }
-  }
+          if (profile.error) return
+          // TODO: Do anything else? (fetchProfile already logs an error.)
+
+          const fullComment = formatComment(profile, comment)
+
+          // Sets is_bot and is_troll to `null` signaling we don't know yet.
+          fullComment.is_bot = null
+          fullComment.is_troll = null
+
+          // Fetch last ≤20 user comment Reddit ids to this comment (data structure).
+          let commentsAfterId = await scraper.fetchRecentComments(profile.name, comment.link_id, comment.created)
+          if (NODE_ENV !== 'production') {
+            // Moved after the above `await` so it's simultaneous with the next `console.debug`:
+            console.debug('worker: fetch100Subreddit cb processing', comment.link_id, 'from', profile.name)
+          }
+
+          if (commentsAfterId.error) return
+          // TODO: Do anything else? (fetchRecentComments already logs an error.)
+
+          // Attaches (≤20) previous comments by the same author to this comment (as a JSON formatted string).
+          fullComment.recent_comments = JSON.stringify(commentsAfterId)
+
+          // Marks record as NOT training data.
+          fullComment.is_training = false
+          if (NODE_ENV !== 'production') {
+            // console.debug('worker: fetch100Subreddit (3) cb sending', fullComment)
+            console.debug(
+              'worker: fetch100Subreddit (3) cb fullComment [ link_id, recent_comments ]',
+              [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created: c.created } })]
+            )
+          }
+
+          // Pushes `comment` task to `queue` (to be sent as message to Kafka).
+          queue.push(fullComment)
+        })
+      }
+    )
+    .catch((error) => {
+      console.error('worker: fetch error!', error)
+    })
 }
 
 /**
@@ -54,8 +103,7 @@ async function fetch100Subreddit (subreddit, each) {
  */
 async function main () {
   try {
-    // Loads env vars (with info for connecting to Kafka).
-    const NODE_ENV = process.env.NODE_ENV
+    // Loads env vars for connecting to Kafka.
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_KEY
@@ -71,7 +119,6 @@ async function main () {
         keyFile: './client.key'
       }
     })
-    console.debug('Created Kafka producer')
 
     await producer.init()
     console.info('worker: connected to Kafka at', process.env.KAFKA_URL)
@@ -96,10 +143,10 @@ async function main () {
               partition: 0,
               message: { value: JSON.stringify(comment) }
             })
-            console.debug('worker: Kafka producer sent comment', comment.link_id, '- offset [0]', result[0].offset)
+            console.info('worker: Kafka producer sent comment', comment.link_id, '- offset [0]', result[0].offset)
             cb()
-          } catch (e) {
-            console.error('worker: Kafka producer submission error!', e)
+          } catch (error) {
+            console.error('worker: Kafka producer submission error!', error)
             cb()
           }
         } else {
@@ -107,12 +154,8 @@ async function main () {
           cb()
         }
       }, 1)
-    console.debug('kafkaQ defined')
 
     let interval
-
-    // Creates a ProfileScraper.
-    const scraper = new ProfileScraper()
 
     /**
      * Fn (to be ran at interval) for streaming comments as messages to the Kafka topic
@@ -129,38 +172,15 @@ async function main () {
           interval = setInterval(stream, 1000)
         }
       } else {
-        // Gets 100 comments from 'politics' subreddit.
-        fetch100Subreddit(
-          'politics',
-          /**
-           * Async callback to process each comment in the 'politics' subreddit.
-           * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
-           * @param comment
-           * @returns {Promise<void>}
-           */
-          async (comment) => {
-            // console.debug("worker stream: fetch100Subreddit('politics') callback is processing", comment.link_id)
-            const profile = await scraper.fetchProfile(comment.author)
-
-            if (profile.error) {
-              console.error("worker stream: fetch100Subreddit('politics') callback error!", profile.error)
-            } else {
-              const fullComment = formatComment(profile, comment)
-
-              // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
-              kafkaQ.push(fullComment)
-            }
-          }
-        )
+        // Gets 100 comments from 'politics' subreddit and queues each for processing.
+        fetch100Subreddit('politics', kafkaQ)
       }
     }
-    console.debug('stream defined')
 
     // Starts the 1s interval.
     interval = setInterval(stream, 1000)
-    console.debug('interval started!')
-  } catch (e) {
-    console.error('worker error!', e)
+  } catch (error) {
+    console.error('worker error!', error)
   }
 }
 
