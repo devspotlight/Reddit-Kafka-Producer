@@ -28,17 +28,17 @@ let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 const scraper = new ProfileScraper()
 
 /**
- * Fetches and process 100 comments from `subreddit`
+ * Fetches and process `n` comments from `subreddit`
  * @param subreddit to fetch
  * @param each callback to process the subreddit comment data
  */
-function fetch100Subreddit (subreddit, queue) {
-  // console.debug('worker: fetch100Subreddit fetching 100 comments from subreddit', subreddit)
+function fetchSubredditComments (subreddit, n, queue) {
+  // console.debug('worker: fetchSubredditComments fetching', n, 'comments from subreddit', subreddit)
 
-  // Fetches reddit.com/${subreddit}/comments.json?limit=100
-  let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=100`
+  // Fetches reddit.com/${subreddit}/comments.json?limit=n
+  let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=${n}`
 
-  // console.debug('worker: fetch100Subreddit requesting', path)
+  // console.debug('worker: fetchSubredditComments requesting', path)
   axios.get(path)
     .then(
       /**
@@ -47,7 +47,7 @@ function fetch100Subreddit (subreddit, queue) {
        * @param response from axios.get
        */
       (response) => {
-        console.debug('worker: fetch100Subreddit received', response.data.data.dist, 'comments from', subreddit)
+        console.info('worker: received', response.data.data.dist, 'comments from', subreddit)
 
         // Processes each `response.data.data` (comment data) with given callback.
         response.data.data.children.forEach(async (child) => {
@@ -67,7 +67,7 @@ function fetch100Subreddit (subreddit, queue) {
           let commentsAfterId = await scraper.fetchRecentComments(profile.name, comment.link_id, comment.created)
           if (NODE_ENV !== 'production') {
             // Moved after the above `await` so it's simultaneous with the next `console.debug`:
-            console.debug('worker: fetch100Subreddit cb processing', comment.link_id, 'from', profile.name)
+            console.info('worker: processing', comment.link_id, comment.created, 'from', profile.name)
           }
 
           if (commentsAfterId.error) return
@@ -79,9 +79,9 @@ function fetch100Subreddit (subreddit, queue) {
           // Marks record as NOT training data.
           fullComment.is_training = false
           if (NODE_ENV !== 'production') {
-            // console.debug('worker: fetch100Subreddit (3) cb sending', fullComment)
-            console.debug(
-              'worker: fetch100Subreddit (3) cb fullComment [ link_id, recent_comments ]',
+            // console.debug('worker: fetchSubredditComments cb sending', fullComment)
+            console.info(
+              'worker: full comment has [ link_id, recent_comments ]',
               [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created: c.created } })]
             )
           }
@@ -142,15 +142,16 @@ async function main () {
               topic: 'northcanadian-72923.reddit-comments',
               partition: 0,
               message: { value: JSON.stringify(comment) }
+              // TODO: Don't JSON.stringify `message`? See https://www.npmjs.com/package/kafka-node#sendpayloads-cb
             })
-            console.info('worker: Kafka producer sent comment', comment.link_id, '- offset [0]', result[0].offset)
+            console.info('worker: Kafka producer sent comment', comment.link_id, comment.created_utc, '- offset', result[0].offset)
             cb()
           } catch (error) {
             console.error('worker: Kafka producer submission error!', error)
             cb()
           }
         } else {
-          console.debug('worker: would produce/send JSON data for', comment.link_id, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
+          console.info('worker: would produce/send JSON data for', comment.link_id, comment.created_utc, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
           cb()
         }
       }, 1)
@@ -162,18 +163,18 @@ async function main () {
      */
     const stream = () => {
       // If the queue is over 500 elements long, the interval stops.
-      // TODO: What if the API is unavailable? `fetch100Subreddit` will keep running again and again but `kafkaQ` never grows?
+      // TODO: What if the API is unavailable? `fetchSubredditComments` will keep running again and again but `kafkaQ` never grows?
       if (kafkaQ.length() > 500) {
         clearInterval(interval)
-        console.debug('worker interval: suspending...')
+        // console.debug('worker interval: suspending...')
         // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
         kafkaQ.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
-          console.debug('worker interval: restarting.')
+          // console.debug('worker interval: restarting.')
           interval = setInterval(stream, 1000)
         }
       } else {
-        // Gets 100 comments from 'politics' subreddit and queues each for processing.
-        fetch100Subreddit('politics', kafkaQ)
+        // Gets 10 comments from 'politics' subreddit and queues each for processing.
+        fetchSubredditComments('politics', 10, kafkaQ)
       }
     }
 
