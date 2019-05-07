@@ -1,5 +1,15 @@
+/**
+ * Function for formatting JSON response data.
+ */
+
 /* global module */
 
+/**
+ * Builds full comment record by whitelisting it from both profile and comment data.
+ * @param profile
+ * @param comment
+ * @returns {{num_reports: *, gilded: *, over_18: *, controversiality: *, removal_reason: *, body: string | HTMLElement | ReadableStream<Uint8Array> | BodyInit | ReadableStream, subreddit_id: *, link_id: *, subreddit: *, author_has_verified_email: *, author_link_karma: *, author_verified: *, archived: *, num_comments: *, score: *, mod_reason_title: *, is_submitter: *, created_utc: *, likes: *, banned_at_utc: *, subreddit_type: *, downs: *, author_created_at: *, edited: (*|number), author: *, link_title: *, author_flair_template_id: *, author_comment_karma: *, mod_reason_by: *, approved_at_utc: *, no_follow: *, ups: *, author_flair_type: *, quarantine: *, banned_by: *}}
+ */
 module.exports = function formatComment (profile, comment) {
   return {
     author_link_karma: profile.link_karma,
@@ -7,7 +17,7 @@ module.exports = function formatComment (profile, comment) {
     author_created_at: profile.created_utc,
     author_verified: profile.verified,
     author_has_verified_email: profile.has_verified_email,
-    subreddit_it: comment.subreddit_id,
+    subreddit_id: comment.subreddit_id,
     approved_at_utc: comment.approved_at_utc,
     edited: comment.edited || 0,
     mod_reason_by: comment.mod_reason_by,

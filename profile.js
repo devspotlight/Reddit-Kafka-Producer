@@ -1,4 +1,9 @@
-/* global process, require, setTimeout */
+/**
+ * 1. Reads from a CSV file, fetches profile data and comments, and saves to the database (`profiles2` table).
+ * To run as a script (once, when needed).
+ */
+
+/* global process, require */
 
 const fs = require('fs')
 const readline = require('readline')
@@ -12,8 +17,12 @@ require('dotenv').config()
 
 async function main () {
   try {
-    const pool = new Pool()
+    const NODE_ENV = process.env.NODE_ENV
 
+    // Connects to Potsgres using default env vars. See https://node-postgres.com/features/connecting
+    const pool = new Pool()
+    // If needed, adds pgcrypto extension to the db (https://www.postgresql.org/docs/current/pgcrypto.html)
+    // and creates `profiles2` table.
     const createTableText = `
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -22,50 +31,67 @@ async function main () {
         data JSON
       );
     `
+    if (NODE_ENV === 'production') {
+      await pool.query(createTableText)
+    } else console.info('profile.js: Would', 'CREATE TABLE IF NOT EXISTS profiles2...')
 
-    await pool.query(createTableText)
+    // Queues https://caolan.github.io/async/docs.html#queue
 
+    /* Queue to insert scraped `profile` to db */
     const dbQ = queue(async (profile, cb) => {
-      console.log('inserting', profile.name)
-      try {
-        await pool.query('INSERT INTO profiles2(data) VALUES($1)', [profile])
-      } catch (e) {
-        console.log(profile.name, e)
-      }
+      console.debug('profile.js dbQ worker: inserting profile for', profile.name)
+
+      if (NODE_ENV === 'production') {
+        try {
+          await pool.query('INSERT INTO profiles2(data) VALUES($1)', [profile])
+        } catch (e) {
+          console.error('profile.js dbQ worker: insertion error!', e)
+        }
+      } else console.info('profile.js dbQ worker: Would', 'INSERT INTO profiles2(data) VALUES(...)', profile)
       cb()
     })
 
-    const redditQ = queue(async ({ fn, username, isBot, isTroll }, cb) => {
-      const profile = await fn(username, isBot, isTroll)
+    // Creates a ProfileScraper.
+    const scraper = new ProfileScraper()
 
-      if (!profile.error) {
+    /* Queue to scrape a Reddit user profile
+     * (awaits scraper.scrapeProfile which calls the Reddit API)
+     * and queues the profile into `dbQ` */
+    const redditQ = queue(async ({ username, isBot, isTroll }, cb) => {
+      console.debug('profile.js redditQ worker: scraping profile for', username)
+
+      const profile = await scraper.scrapeProfile(username, isBot, isTroll)
+
+      if (profile.error) {
+        console.error('profile.js redditQ worker: error!', profile.error)
+      } else {
         dbQ.push(profile)
       }
 
       cb()
     })
 
-    const scraper = new ProfileScraper()
-
+    // Opens bots.csv file.
     const lines = readline.createInterface({
       input: fs.createReadStream('bots.csv')
     })
 
+    // Reads and parses each CSV line. And...
     lines.on('line', line => {
       const l = line.split(',')
       const username = l[0]
       const isBot = l[1] === 'TRUE'
       const isTroll = l[2] === 'TRUE'
 
+      // Queues scraping of each Reddit user profile.
       redditQ.push({
-        fn: scraper.scrapeProfile.bind(scraper),
         username,
         isBot,
         isTroll
       })
     })
   } catch (e) {
-    console.log(e)
+    console.error('profile.js: main() error!', e)
   }
 }
 
