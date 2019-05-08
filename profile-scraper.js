@@ -95,14 +95,16 @@ ProfileScraper.prototype.scrapeProfile = async function (username, isBot, isTrol
 }
 
 /**
- * Async fn that tries to get the 20 most recent comments of `username` previous to `linkId`/`created` combo
+ * Async fn that tries to get the `n` most recent comments of `username` previous to `linkId`/`created` combo
  * (Only looks in ≤25 latest comments by `username`.)
  * @param username to fetch recent comments for
  * @param linkId comment.link_id looked for among recent comments by `username`
  * @param created timestamp looked for among recent comments by `username`
+ * @param n Number of recent comments. Default 20. Range [1-24]
  * @returns {Promise<*>} Array
  */
-ProfileScraper.prototype.fetchRecentComments = async function (username, linkId, created) {
+ProfileScraper.prototype.fetchRecentComments = async function (username, linkId, created, n) {
+  if (Number.isNaN(n) || n < 1 || n > 24) return { error: '`n` param must be in range [1-24]' }
   try {
     const path = `https://www.reddit.com/user/${username}/comments.json?limit=25` // 25 is the default atm but JIC
     const response = await axios.get(path)
@@ -120,9 +122,9 @@ ProfileScraper.prototype.fetchRecentComments = async function (username, linkId,
       }
     }
     // console.debug('ProfileScraper.fetchRecentComments: found linkId in position', previousTo)
-    // Makes sure to return only comments BEFORE linkId (if found) –"after" in the array order– and UP TO 20.
+    // Makes sure to return only comments BEFORE linkId (if found) –"after" in the array order– and UP TO `n`.
     let commentsAfterId = comments.slice(previousTo + 1)
-    if (commentsAfterId.length > 20) commentsAfterId = commentsAfterId.slice(0, 20)
+    if (commentsAfterId.length > n) commentsAfterId = commentsAfterId.slice(0, n)
 
     // console.debug('ProfileScraper.fetchRecentComments:', commentsAfterId.length, 'comment link_ids AfterId', linkId, created, 'link_ids', commentsAfterId.map(c => { return { link_id: c.link_id, created: c.created } }))
     return commentsAfterId

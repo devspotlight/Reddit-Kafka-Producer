@@ -64,7 +64,7 @@ function fetchSubredditComments (subreddit, n, queue) {
           fullComment.is_troll = null
 
           // Fetch last ≤20 user comment Reddit ids to this comment (data structure).
-          let commentsAfterId = await scraper.fetchRecentComments(profile.name, comment.link_id, comment.created)
+          let commentsAfterId = await scraper.fetchRecentComments(profile.name, comment.link_id, comment.created, 20)
           if (NODE_ENV !== 'production') {
             // Moved after the above `await` so it's simultaneous with the next `console.debug`:
             console.info('worker: processing', comment.link_id, comment.created, 'from', profile.name)
