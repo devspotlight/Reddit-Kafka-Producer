@@ -12,7 +12,7 @@ const Cursor = require('pg-cursor')
 const queue = require('async.queue')
 const Kafka = require('no-kafka')
 
-const formatComment = require('./format-comment')
+const { formatComment } = require('./format-comment')
 
 require('dotenv').config()
 const NODE_ENV = process.env.NODE_ENV
@@ -60,11 +60,13 @@ function fetchProfiles (cursor, n, queue) {
          */
         (profile) => {
           console.info('kafka-export: processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
-          const comments = profile.data.comments
+          const comments = profile.data.comments.reverse() // (`profile2` `comments` are expected in descending order.)
 
           let recentComments = [] // Start a data queue
 
           comments.forEach((comment) => {
+            // console.debug('kafka-export.js: fetchProfiles x', n, 'comment', comment)
+
             const fullComment = formatComment(profile.data, comment)
 
             // Sets is_bot and is_troll (coming originally from bots.csv).
@@ -72,23 +74,23 @@ function fetchProfiles (cursor, n, queue) {
             fullComment.is_troll = profile.data.isTroll
 
             // Attaches (≤20) previous comments by the same author to this comment.
-            let commentsAfterId = recentComments.slice() // data structure
-            fullComment.recent_comments = JSON.stringify(commentsAfterId) // JSON formatted string
+            fullComment.recent_comments = JSON.stringify(recentComments.slice(1, 21)) // JSON formatted string
 
             // Marks record as training data.
             fullComment.is_training = true
 
             // // console.debug('kafka-export.js: fetchProfiles x', n, 'sending comment', fullComment)
             // console.debug(
-            //   'kafka-export.js: forEach comment link_id fullComment link_id's [ link_id, recent_comments ]',
-            //   [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created: c.created } }]
+            //   'kafka-export.js: comment [ link_id, recent_comments ]',
+            //   [fullComment.link_id, recentComments.slice(1, 21).map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
             // )
 
-            // Pushes `comment` task to `kafkaQ` queue (to be sent as message to Kafka).
+            // Pushes comment as task to `queue` (to be sent as message to Kafka).
             queue.push(fullComment)
 
+            // Adds full comment to recent comments queue (without augmenting fields to avoid recursive `recent_comments`).
+            recentComments.push(formatComment(profile.data, comment))
             // Keeps `recentComments` data queue shifting and at max length 20.
-            recentComments.push(comment)
             if (recentComments.length > 20) recentComments.shift()
           })
         }

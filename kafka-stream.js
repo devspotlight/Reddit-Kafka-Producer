@@ -12,7 +12,7 @@ const queue = require('async.queue')
 const Kafka = require('no-kafka')
 
 const ProfileScraper = require('./profile-scraper')
-const formatComment = require('./format-comment')
+const { formatComment } = require('./format-comment')
 
 require('dotenv').config()
 const NODE_ENV = process.env.NODE_ENV
@@ -64,25 +64,29 @@ function fetchSubredditComments (subreddit, n, queue) {
           fullComment.is_troll = null
 
           // Fetch last ≤20 user comment Reddit ids to this comment (data structure).
-          let commentsAfterId = await scraper.fetchRecentComments(profile.name, comment.link_id, comment.created, 20)
-          if (NODE_ENV !== 'production') {
-            // Moved after the above `await` so it's simultaneous with the next `console.debug`:
-            console.info('worker: processing', comment.link_id, comment.created, 'from', profile.name)
-          }
-
+          let commentsAfterId = await scraper.fetchRecentComments(profile, comment.link_id, comment.created_utc, 20)
           if (commentsAfterId.error) return
           // TODO: Do anything else? (fetchRecentComments already logs an error.)
+
+          if (NODE_ENV !== 'production') {
+            console.info('worker: processing', comment.link_id, comment.created_utc, 'by', profile.name, '(with', commentsAfterId.length, 'recent commits)')
+          }
 
           // Attaches (≤20) previous comments by the same author to this comment (as a JSON formatted string).
           fullComment.recent_comments = JSON.stringify(commentsAfterId)
 
           // Marks record as NOT training data.
           fullComment.is_training = false
+
+          // console.debug('worker: comment', comment)
+          // console.debug('worker: commentsAfterId', commentsAfterId)
+          // console.debug('worker: fullComment', fullComment)
+
           if (NODE_ENV !== 'production') {
             // console.debug('worker: fetchSubredditComments cb sending', fullComment)
             console.info(
               'worker: full comment has [ link_id, recent_comments ]',
-              [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created: c.created } })]
+              [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
             )
           }
 
