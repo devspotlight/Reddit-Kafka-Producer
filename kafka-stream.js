@@ -168,7 +168,7 @@ async function main () {
     const stream = () => {
       // If the queue is over 500 elements long, the interval stops.
       // TODO: What if the API is unavailable? `fetchSubredditComments` will keep running again and again but `kafkaQ` never grows?
-      if (kafkaQ.length() > 500) {
+      if (kafkaQ.length() > 50) {
         clearInterval(interval)
         // console.debug('worker interval: suspending...')
         // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
