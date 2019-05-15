@@ -70,8 +70,8 @@ function fetchProfiles (cursor, n, queue) {
             const fullComment = formatComment(profile.data, comment)
 
             // Sets is_bot and is_troll (coming originally from bots.csv).
-            fullComment.is_bot = profile.data.isBot
-            fullComment.is_troll = profile.data.isTroll
+            fullComment.is_bot = profile.data.is_bot
+            fullComment.is_troll = profile.data.is_troll
 
             // Attaches (≤20) previous comments by the same author to this comment.
             fullComment.recent_comments = JSON.stringify(recentComments.slice(1, 21)) // JSON formatted string

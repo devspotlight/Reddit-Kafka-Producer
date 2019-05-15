@@ -76,7 +76,7 @@ ProfileScraper.prototype.fetchComments = async function (username, after) {
  * @param username to fetch profile and comments for
  * @param isBot is returned back as is in an object
  * @param isTroll is returned back as is in an object
- * @returns {Promise<*>} object with user profile, comments, `isBot`, and `isTroll
+ * @returns {Promise<*>} object with {<user profile data fields>, <comments>, `is_bot`, and `is_troll`}
  */
 ProfileScraper.prototype.scrapeProfile = async function (username, isBot, isTroll) {
   const user = await this.fetchProfile(username)
@@ -93,7 +93,7 @@ ProfileScraper.prototype.scrapeProfile = async function (username, isBot, isTrol
 
   const comments = await this.fetchComments(username)
 
-  return { ...user, comments, isBot, isTroll }
+  return { ...user, comments, is_bot: isBot, is_troll: isTroll }
 }
 
 /**
