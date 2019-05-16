@@ -73,8 +73,8 @@ function fetchProfiles (cursor, n, queue) {
             fullComment.is_bot = profile.data.is_bot
             fullComment.is_troll = profile.data.is_troll
 
-            // Attaches (≤20) previous comments by the same author to this comment.
-            fullComment.recent_comments = JSON.stringify(recentComments.slice(1, 21)) // JSON formatted string
+            // Attaches (≤20) recent comments by the same author PREVIOUS to this comment.
+            fullComment.recent_comments = JSON.stringify(recentComments.slice(0, 20)) // JSON formatted string
 
             // Marks record as training data.
             fullComment.is_training = true
@@ -82,15 +82,15 @@ function fetchProfiles (cursor, n, queue) {
             // // console.debug('kafka-export.js: fetchProfiles x', n, 'sending comment', fullComment)
             // console.debug(
             //   'kafka-export.js: comment [ link_id, recent_comments ]',
-            //   [fullComment.link_id, recentComments.slice(1, 21).map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
+            //   [fullComment.link_id, recentComments.slice(0, 20).map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
             // )
 
             // Pushes comment as task to `queue` (to be sent as message to Kafka).
             queue.push(fullComment)
 
-            // Adds full comment to recent comments queue (without augmenting fields to avoid recursive `recent_comments`).
+            // Adds full comment to recent comments queue (without extra fields to avoid recursive `recent_comments`).
             recentComments.push(formatComment(profile.data, comment))
-            // Keeps `recentComments` data queue shifting and at max length 20.
+            // Keeps only the 20 latest comments in the `recentComments` queue struct.
             if (recentComments.length > 20) recentComments.shift()
           })
         }
