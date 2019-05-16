@@ -60,6 +60,7 @@ function fetchProfiles (cursor, n, queue) {
          */
         (profile) => {
           console.info('kafka-export: processing profile', profile.data.name, 'with', profile.data.comments.length, 'comments')
+          // console.debug('kafka-export.js: profile.data', profile.data)
           const comments = profile.data.comments.reverse() // (`profile2` `comments` are expected in descending order.)
 
           let recentComments = [] // Start a data queue
@@ -70,8 +71,8 @@ function fetchProfiles (cursor, n, queue) {
             const fullComment = formatComment(profile.data, comment)
 
             // Sets is_bot and is_troll (coming originally from bots.csv).
-            fullComment.is_bot = profile.data.is_bot
-            fullComment.is_troll = profile.data.is_troll
+            fullComment.is_bot = profile.data.isBot
+            fullComment.is_troll = profile.data.isTroll
 
             // Attaches (≤20) recent comments by the same author PREVIOUS to this comment.
             fullComment.recent_comments = JSON.stringify(recentComments.slice(0, 20)) // JSON formatted string
@@ -145,6 +146,7 @@ async function main () {
        */
       async (comment, cb) => {
         // console.debug('kafka-export.js: kafkaQ sending JSON.stringify of', comment.link_id, 'to Kafka')
+        // console.debug('worker: comment data', comment)
         wait(500)
         // Try sending stringified JSON `comment` to Kafka (async fn) after 500 ms.
         if (NODE_ENV === 'production') {

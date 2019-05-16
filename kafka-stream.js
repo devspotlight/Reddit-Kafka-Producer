@@ -137,7 +137,8 @@ async function main () {
        * @returns {Promise<void>}
        */
       async (comment, cb) => {
-        // console.debug('worker: producing JSON.stringify of', comment.link_id, 'for Kafka')
+        // console.debug('worker: producing JSON.stringify of comment', comment.link_id, 'for Kafka')
+        // console.debug('worker: comment data', comment)
         wait(500)
         // Try sending stringified JSON `comment` to Kafka (async fn) after 500 ms.
         if (NODE_ENV === 'production') {
