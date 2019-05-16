@@ -101,16 +101,16 @@ ProfileScraper.prototype.scrapeProfile = async function (username, isBot, isTrol
  * (Only looks in ≤25 latest comments by `profile.name`.)
  * @param profile to fetch recent comments for
  * @param linkId comment.link_id looked for among recent comments by `profile.name`
- * @param created_utc timestamp looked for among recent comments by `profile.name`
+ * @param createdUtc timestamp looked for among recent comments by `profile.name`
  * @param n Number of recent comments. Default 20. Range [1-24]
- * @returns {Promise<{error: string}|{error: *}|*>} recent comments after `linkId`/`created_utc`, formatted with `formatComment`
+ * @returns {Promise<{error: string}|{error: *}|*>} recent comments after `linkId`/`createdUtc`, formatted with `formatComment`
  */
-ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, created_utc, n) {
+ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, createdUtc, n) {
   if (Number.isNaN(n) || n < 1 || n > 24) return { error: '`n` param must be in range [1-24]' }
   try {
     const path = `https://www.reddit.com/user/${profile.name}/comments.json?limit=25` // 25 is the default atm but JIC
     const response = await axios.get(path)
-    // console.debug('fetchRecentComments: params profile.name link_id created_utc -', profile.name, linkId, created_utc) // NOTE: Printed after above `await`
+    // console.debug('fetchRecentComments: params profile.name link_id createdUtc -', profile.name, linkId, createdUtc) // NOTE: Printed after above `await`
     // console.debug('ProfileScraper.fetchRecentComments: response.data.data.children', response.data.data.children)
     const comments = response.data.data.children.map(child => child.data)
     // console.debug('ProfileScraper.fetchRecentComments:', comments.length, 'comment link_ids', comments.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } }))
@@ -118,7 +118,7 @@ ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, 
     // Tries to find `linkId` among the latest `profile.name` comments.
     let previousTo = -1
     for (let i = 0; i < comments.length; i++) {
-      if (comments[i].link_id === linkId && comments[i].created_utc === created_utc) {
+      if (comments[i].link_id === linkId && comments[i].created_utc === createdUtc) {
         previousTo = i
         break
       }
@@ -128,7 +128,7 @@ ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, 
     let commentsAfterId = comments.slice(previousTo + 1, previousTo + 1 + n)
       .map(comment => formatComment(profile, comment))
 
-    // console.debug('ProfileScraper.fetchRecentComments:', commentsAfterId.length, 'comment link_ids AfterId', linkId, created_utc, 'link_ids', commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } }))
+    // console.debug('ProfileScraper.fetchRecentComments:', commentsAfterId.length, 'comment link_ids AfterId', linkId, createdUtc, 'link_ids', commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } }))
     return commentsAfterId
   } catch (error) {
     console.error('ProfileScraper.fetchRecentComments error!', error)
