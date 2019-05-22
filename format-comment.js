@@ -26,7 +26,7 @@ module.exports = {
       created_utc: comment.created_utc,
       score: comment.score,
       over_18: comment.over_18,
-      body: comment.body.slice(0, 256).replace(/["|\n|\r\n]/, ''),
+      body: comment.body.slice(0, 256).replace(/("|\r\n|\r|\n)/g, ''),
       downs: comment.downs,
       is_submitter: comment.is_submitter,
       num_reports: comment.num_reports,

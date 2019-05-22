@@ -34,33 +34,38 @@ Create a .env with values for the env vars listed in the previous section.
 Install all the dependencies:
 
 ```console
-npm i --dev
+$ npm i --dev
 ```
 > If `--dev` isn't used, your local installation will lack linting and CSV dump abilities.
 
 Run scripts 1-3 when needed like:
 
 ```console
-node profile.js
+$ node profile.js
 ```
 
 or for a CSV dump of kafka-export.js:
 
 ```console
-npm run dev-dump
+$ npm run dev-dump
 ```
+> `csv-writter` encodes `"` inside strings as `""` which seems to be a CSV-specific practice. You may want to run
+> ```console
+>  $ sed -i -e 's/""/\\"/g' training-dump.csv
+>  ```
+> to replace them for `\"`
 
 Run main (worker) app:
 
 ```console
-npm run worker
+$ npm run worker
 # Same as `node kafka-stream.js` (See Procfile)
 ```
 
 > Lint before committing changes:
 > 
 > ```console
-> npm run lint
+> $ npm run lint
 > ```
 
 ## Deploy on Heroku
@@ -68,7 +73,7 @@ npm run worker
 Besides the env vars mentioned before, you must set:
 
 ```console
-heroku config:set NODE_ENV=production
+$ heroku config:set NODE_ENV=production
 ```
 
 > Also unpack `DATABASE_URL` e.g. with https://metacpan.org/pod/Env::Heroku ?
