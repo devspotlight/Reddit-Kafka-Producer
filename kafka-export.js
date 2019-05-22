@@ -17,6 +17,44 @@ const { formatComment } = require('./format-comment')
 require('dotenv').config()
 const NODE_ENV = process.env.NODE_ENV
 
+let createCsvWriter
+let csvWriter
+if (NODE_ENV !== 'production') {
+  try {
+    createCsvWriter = require('csv-writer').createObjectCsvWriter
+  } catch (e) {
+    console.warn('Install npm dev packages for CSV dump!')
+  }
+  csvWriter = createCsvWriter({
+    path: 'training-dump.csv',
+    header: [
+      'banned_by',
+      'no_follow',
+      'link_id',
+      'gilded',
+      'author',
+      'author_verified',
+      'author_comment_karma',
+      'author_link_karma',
+      'num_comments',
+      'created_utc',
+      'score',
+      'over_18',
+      'body',
+      'downs',
+      'is_submitter',
+      'num_reports',
+      'controversiality',
+      'quarantine',
+      'ups',
+      'is_bot',
+      'is_troll',
+      'recent_comments'// ,
+      // 'is_training'
+    ]
+  })
+}
+
 /**
  * From https://stackoverflow.com/a/39027151/761963
  * @param ms milliseconds to wait
@@ -164,7 +202,12 @@ async function main () {
             cb()
           }
         } else {
-          console.info('kafka-export: would produce/send JSON data for', comment.link_id, comment.created_utc, 'comment by', comment.author, '- Queue len', kafkaQ.length())
+          if (csvWriter) { // Writes line to CSV file if the dev dependency is available.
+            await csvWriter.writeRecords([comment])
+            console.info('kafka-export: dumped CSV line for', comment.link_id, comment.created_utc, 'comment by', comment.author, '- Queue len', kafkaQ.length())
+          } else {
+            console.info('kafka-export: would produce', comment.link_id, comment.created_utc, 'comment by', comment.author, '- Queue len', kafkaQ.length())
+          }
           cb()
         }
       }, 1)

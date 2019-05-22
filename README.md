@@ -31,16 +31,23 @@ and:
 
 Create a .env with values for the env vars listed in the previous section.
 
-Install the dependencies:
+Install all the dependencies:
 
 ```console
-npm i
+npm i --dev
 ```
+> If `--dev` isn't used, your local installation will lack linting and CSV dump abilities.
 
 Run scripts 1-3 when needed like:
 
 ```console
-node profile.js # or kafka-export.js
+node profile.js
+```
+
+or for a CSV dump of kafka-export.js:
+
+```console
+npm run dev-dump
 ```
 
 Run main (worker) app:
