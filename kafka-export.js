@@ -190,7 +190,7 @@ async function main () {
         if (NODE_ENV === 'production') {
           try {
             let result = await producer.send({
-              topic: 'northcanadian-72923.reddit-comments',
+              topic: 'pearl-20877.reddit-comments', // TODO Hardcoded topic name
               partition: 0,
               message: { value: JSON.stringify(comment) }
               // TODO: Don't JSON.stringify `message`? See https://www.npmjs.com/package/kafka-node#sendpayloads-cb
