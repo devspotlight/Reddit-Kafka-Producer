@@ -105,7 +105,7 @@ ProfileScraper.prototype.scrapeProfile = async function (username, isBot, isTrol
  * @param n Number of recent comments. Default 20. Range [1-24]
  * @returns {Promise<{error: string}|{error: *}|*>} recent comments after `linkId`/`createdUtc`, formatted with `formatComment`
  */
-ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, createdUtc, n) {
+ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, createdUtc, n = 20) {
   if (Number.isNaN(n) || n < 1 || n > 24) return { error: '`n` param must be in range [1-24]' }
   try {
     const path = `https://www.reddit.com/user/${profile.name}/comments.json?limit=25` // 25 is the default atm but JIC
@@ -125,8 +125,8 @@ ProfileScraper.prototype.fetchRecentComments = async function (profile, linkId, 
     }
     // console.debug('ProfileScraper.fetchRecentComments: found linkId in position', previousTo)
     // Makes sure to return only comments BEFORE linkId (if found) –"after" in the array order– and UP TO `n`.
-    let commentsAfterId = comments.slice(previousTo + 1, previousTo + 1 + n)
-      .map(comment => formatComment(profile, comment))
+    let commentsAfterId =
+      comments.slice(previousTo + 1, previousTo + 1 + n).map(comment => formatComment(profile, comment))
 
     // console.debug('ProfileScraper.fetchRecentComments:', commentsAfterId.length, 'comment link_ids AfterId', linkId, createdUtc, 'link_ids', commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } }))
     return commentsAfterId

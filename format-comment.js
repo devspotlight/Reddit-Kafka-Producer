@@ -13,6 +13,9 @@ module.exports = {
    * @returns {{num_reports: *, gilded: *, downs: *, author: *, over_18: *, controversiality: *, body: string, link_id: *, author_verified: *, author_link_karma: *, num_comments: *, score: *, author_comment_karma: *, is_submitter: *, no_follow: *, ups: *, quarantine: *, created_utc: *, banned_by: *}}
    */
   formatComment: function (profile, comment) {
+    let body256 = comment.body.slice(0, 256).replace(/("|\r\n|\r|\n)/g, '')
+    // console.debug('formatComment: went from', comment.body)
+    // console.debug('formatComment: to stripped', body)
     return {
       banned_by: comment.banned_by,
       no_follow: comment.no_follow,
@@ -26,7 +29,7 @@ module.exports = {
       created_utc: comment.created_utc,
       score: comment.score,
       over_18: comment.over_18,
-      body: comment.body.slice(0, 256).replace(/("|\r\n|\r|\n)/g, ''),
+      body: body256,
       downs: comment.downs,
       is_submitter: comment.is_submitter,
       num_reports: comment.num_reports,
