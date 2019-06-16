@@ -47,6 +47,9 @@ function fetchSubredditComments (subreddit, n, queue) {
        * @param response from axios.get
        */
       (response) => {
+        // TODO: Use response.data.data.after for future call (`${path}&after=${after}`).
+        //       Requires re-engineering of interval so it waits for each axios.get call
+
         console.info('worker: received', response.data.data.dist, 'comments from', subreddit)
 
         // Processes each `response.data.data` (comment data) with given callback.
@@ -82,15 +85,16 @@ function fetchSubredditComments (subreddit, n, queue) {
           // console.debug('worker: commentsAfterId', commentsAfterId)
           // console.debug('worker: fullComment', fullComment)
 
-          if (NODE_ENV !== 'production') {
-            // console.debug('worker: fetchSubredditComments cb sending', fullComment)
-            console.info(
-              'worker: full comment has [ link_id, recent_comments ]',
-              [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
-            )
-          }
+          // if (NODE_ENV !== 'production') {
+          //   // console.debug('worker: fetchSubredditComments cb sending', fullComment)
+          //   console.debug(
+          //     'worker: full comment has [ link_id, recent_comments ]',
+          //     [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
+          //   )
+          // }
 
           // Pushes `comment` task to `queue` (to be sent as message to Kafka).
+          console.debug('worker: pushing', fullComment.link_id, fullComment.created_utc)
           queue.push(fullComment)
         })
       }
@@ -144,22 +148,22 @@ async function main () {
         if (NODE_ENV === 'production') {
           try {
             let result = await producer.send({
-              topic: 'pearl-20877.reddit-comments', // TODO Hardcoded topic name
-              partition: 0,
-              message: { value: JSON.stringify(comment) }
+              topic: 'pearl-20877.reddit-comments', // TODO: Hardcoded topic name
+              message: { value: JSON.stringify(comment) },
               // TODO: Don't JSON.stringify `message`? See https://www.npmjs.com/package/kafka-node#sendpayloads-cb
+              key: `${comment.link_id}.${comment.created_utc}`, // To use http://kafka.apache.org/documentation.html#compaction
+              partition: 0
             })
             console.info('worker: Kafka producer sent comment', comment.link_id, comment.created_utc, '- offset', result[0].offset)
-            cb()
           } catch (error) {
             console.error('worker: Kafka producer submission error!', error)
-            cb()
           }
         } else {
-          console.info('worker: would produce/send JSON data for', comment.link_id, comment.created_utc, 'comment by', comment.author, 'to Kafka. Q len', kafkaQ.length())
-          cb()
+          console.info('worker: would produce (Kafka) message with key', `${comment.link_id}.${comment.created_utc} (comment by ${comment.author}). Q len`, kafkaQ.length())
         }
-      }, 1)
+        cb()
+      },
+      1) // NOTE: concurrency HAS to be 1 for `after` to work correctly.
 
     let interval
 
@@ -167,18 +171,19 @@ async function main () {
      * Fn (to be ran at interval) for streaming comments as messages to the Kafka topic
      */
     const stream = () => {
-      // If the queue is over 500 elements long, the interval stops.
-      // TODO: What if the API is unavailable? `fetchSubredditComments` will keep running again and again but `kafkaQ` never grows?
+      // If the queue is over 50 elements long, the interval stops.
       if (kafkaQ.length() > 50) {
         clearInterval(interval)
         // console.debug('worker interval: suspending...')
-        // Re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
+
+        // But re-starts the interval when the last item from queue `kafkaQ` has returned from its worker.
         kafkaQ.drain = () => { // See https://caolan.github.io/async/docs.html#QueueObject
           // console.debug('worker interval: restarting.')
           interval = setInterval(stream, 1000)
         }
       } else {
         // Gets 10 comments from 'politics' subreddit and queues each for processing.
+        // TODO: We may have already fetched some of these latest 10 comments 1 sec ago.
         fetchSubredditComments('politics', 10, kafkaQ)
       }
     }

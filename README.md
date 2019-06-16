@@ -10,7 +10,7 @@ This repository is a collection of utilities and scripts dedicated to scraping c
 
 ## Configuration
 
-The following environment variables are required for the 4 numbered scripts to run
+The following environment variables are required for the numbered scripts to run
 properly (may use .env file):
 
 - `PGUSER`
@@ -28,6 +28,8 @@ and:
 - `KAFKA_URL`
 
 ## Local Development
+
+> Still depends on an actual Kafka cluster but won't send anything to it in dev mode.
 
 Create a .env with values for the env vars listed in the previous section.
 
@@ -59,7 +61,7 @@ Run main (worker) app:
 
 ```console
 $ npm run worker
-# Same as `node kafka-stream.js` (See Procfile)
+# Same as `node kafka-stream.js` (see package.json scripts)
 ```
 
 > Lint before committing changes:
@@ -70,17 +72,19 @@ $ npm run worker
 
 ## Deploy on Heroku
 
-Besides the env vars mentioned before, you must set:
+Most of the env vars mentioned before are set automatically by Heroku Pg and Kafka addons, you must separately set:
 
 ```console
 $ heroku config:set NODE_ENV=production
 ```
 
+The kafka-stream.js worker expects [log compaction](https://devcenter.heroku.com/articles/kafka-on-heroku#log-compaction) on the Kafka topic.
+
 > Also unpack `DATABASE_URL` e.g. with https://metacpan.org/pod/Env::Heroku ?
   See https://devcenter.heroku.com/articles/heroku-postgresql#provisioning-heroku-postgres
 
 ### Running scripts on Heroku
-This can be achieved with one-off dynos When needed:
+This can be achieved with one-off Dynos When needed:
 
 ```console
 $ heroku run bash
