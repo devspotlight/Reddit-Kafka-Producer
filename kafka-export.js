@@ -147,7 +147,7 @@ async function main () {
     // Loads env vars for connecting to Kafka.
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
-    const key = process.env.KAFKA_CLIENT_KEY
+    const key = process.env.KAFKA_CLIENT_CERT_KEY
 
     // Connects to Potsgres using default env vars. See https://node-postgres.com/features/connecting
     const pool = new Pool({ ssl: true })

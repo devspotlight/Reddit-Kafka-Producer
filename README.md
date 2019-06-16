@@ -24,8 +24,10 @@ properly (may use .env file):
 and:
 
 - `KAFKA_CLIENT_CERT`
-- `KAFKA_CLIENT_KEY`
+- `KAFKA_CLIENT_CERT_KEY`
 - `KAFKA_URL`
+
+> Only the latter KAFKA_ ones are needed for the export and stream scripts.
 
 ## Local Development
 

@@ -114,7 +114,7 @@ async function main () {
     // Loads env vars for connecting to Kafka.
     const url = process.env.KAFKA_URL
     const cert = process.env.KAFKA_CLIENT_CERT
-    const key = process.env.KAFKA_CLIENT_KEY
+    const key = process.env.KAFKA_CLIENT_CERT_KEY
 
     // Creates Kafka producer. (Overwrites local files to use as Kafka credentials.)
     fs.writeFileSync('./client.crt', cert)
@@ -149,12 +149,13 @@ async function main () {
           try {
             let result = await producer.send({
               topic: 'pearl-20877.reddit-comments', // TODO: Hardcoded topic name
-              message: { value: JSON.stringify(comment) },
+              partition: 0,
+              // key: `${comment.link_id}.${comment.created_utc}`, // To use http://kafka.apache.org/documentation.html#compaction
               // TODO: Don't JSON.stringify `message`? See https://www.npmjs.com/package/kafka-node#sendpayloads-cb
-              key: `${comment.link_id}.${comment.created_utc}`, // To use http://kafka.apache.org/documentation.html#compaction
-              partition: 0
+              message: { value: JSON.stringify(comment) }
             })
             console.info('worker: Kafka producer sent comment', comment.link_id, comment.created_utc, '- offset', result[0].offset)
+            // console.debug('response', result)
           } catch (error) {
             console.error('worker: Kafka producer submission error!', error)
           }
