@@ -1,5 +1,5 @@
 /**
- * 3. Fetches comments from a subreddit and sends it to kafka.
+ * 3. Fetches n comments from the 'politics' subreddit every 5 seconds, processes and sends them to Kafka.
  * To be ran as a worker.
  */
 
@@ -27,8 +27,6 @@ let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 // Creates a ProfileScraper.
 const scraper = new ProfileScraper()
 
-let after = false
-
 /**
  * Fetches and process `n` comments from `subreddit`
  * @param subreddit to fetch
@@ -49,9 +47,6 @@ async function fetchSubredditComments (subreddit, n, queue) {
     //  * Fetches comment author's profile data and formats the comment, before queueing it to be sent to Kafka.
     //  * @param response from axios.get
     //  */
-    after = response.data.data.after
-    // TODO: Use `after` for next call (`${path}&after=${after}`)?
-    //       Requires re-engineering of interval so it waits for each axios.get call
   } catch (ex) {
     console.error('worker: fetch error!', ex)
     return
@@ -59,19 +54,23 @@ async function fetchSubredditComments (subreddit, n, queue) {
   // console.debug('worker: response', response)
 
   console.info('worker: received', response.data.data.dist, 'comments from', subreddit)
+  const comments = response.data.data.children.reverse()
+  // console.debug('worker: comments', comments)
 
-  console.debug(`worker: children`, response.data.data.children.map(
-    c => { return { link_id: c.data.link_id, created_utc: c.data.created_utc } }
+  console.debug(`worker: children`, comments.map(
+    c => { return { name: c.data.name, created_utc: c.data.created_utc } }
   ))
-  console.debug('worker: after', response.data.data.after)
 
-  // Processes each `response.data.data` (comment data) with given callback.
-  response.data.data.children.forEach(async (child) => {
+  // Processes each `response.data.data` (comment data).
+  comments.forEach(async (child) => {
+    // FIXME: This async `forEach` callback messes up the queueing order (`queue.push`).
     const comment = child.data
     const profile = await scraper.fetchProfile(comment.author)
 
     if (profile.error) return
     // TODO: Do anything else? (fetchProfile already logs an error.)
+
+    // TODO: Use comment.name (t1_ https://www.reddit.com/dev/api#fullnames) instead of comment.link_id (t3_ fullname) !
 
     const fullComment = formatComment(profile, comment)
 
@@ -106,14 +105,14 @@ async function fetchSubredditComments (subreddit, n, queue) {
     //   )
     // }
 
+    // console.debug('worker: pushing', fullComment.link_id, fullComment.created_utc)
     // Pushes `comment` task to `queue` (to be sent as message to Kafka).
-    console.debug('worker: pushing', fullComment.link_id, fullComment.created_utc)
     queue.push(fullComment)
   })
 }
 
 /**
- * Async main fn allows us to await other async calls
+ * FIXME: `async` `main` fn just to `await producer.init()`
  * i.e. `producer.init()` and `pool.connect()`
  * @returns {Promise<void>}
  */
@@ -124,26 +123,31 @@ async function main () {
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_CERT_KEY
 
-    // Creates Kafka producer. (Overwrites local files to use as Kafka credentials.)
-    fs.writeFileSync('./client.crt', cert)
-    fs.writeFileSync('./client.key', key)
-    const producer = new Kafka.Producer({
-      clientId: 'reddit-comment-producer',
-      connectionString: url.replace(/\+ssl/g, ''),
-      ssl: {
-        certFile: './client.crt',
-        keyFile: './client.key'
-      }
-    })
+    if (NODE_ENV === 'production') {
+      // Creates Kafka producer. (Overwrites local files to use as Kafka credentials.)
+      fs.writeFileSync('./client.crt', cert)
+      fs.writeFileSync('./client.key', key)
+      const producer = new Kafka.Producer({
+        clientId: 'reddit-comment-producer',
+        connectionString: url.replace(/\+ssl/g, ''),
+        ssl: {
+          certFile: './client.crt',
+          keyFile: './client.key'
+        }
+      })
 
-    await producer.init()
-    console.info('worker: connected to Kafka at', process.env.KAFKA_URL)
+      await producer.init()
+      console.info('worker: connected to Kafka at', process.env.KAFKA_URL)
+    } else {
+      console.info('worker: NOT PROD. Skipping Kafka connection.')
+    }
 
     /* Queue to send comments to the Kafka topic */ // See https://caolan.github.io/async/docs.html#queue
+    // FIXME: Defined inside `main` so it can access `producer`
     const kafkaQ = queue(
       /**
        * Async `kafkaQ` worker fn to send each comment to Kafka (via `producer`).
-       * @todo https://github.com/oleksiyk/kafka/blob/master/README.ts.md#batching-grouping-produce-requests
+       * TODO https://github.com/oleksiyk/kafka/blob/master/README.ts.md#batching-grouping-produce-requests
        * @param comment Reddit comment JSON data expected
        * @param cb callback invoked when done
        * @returns {Promise<void>}
@@ -152,7 +156,7 @@ async function main () {
         // console.debug('worker: producing JSON.stringify of comment', comment.link_id, 'for Kafka')
         // console.debug('worker: comment data', comment)
 
-        // Try sending stringified JSON `comment` to Kafka (async fn) after 500 ms.
+        // Try sending stringified JSON `comment` to Kafka
         if (NODE_ENV === 'production') {
           try {
             let result = await producer.send({
@@ -173,32 +177,31 @@ async function main () {
         await wait(500) // pace Kafka producer
         cb()
       },
-      1) // NOTE: concurrency HAS to be 1 for `&after` to work correctly.
-
+      1)
 
     /**
      * Fn (to be ran at interval) for streaming comments as messages to the Kafka topic
      */
     const stream = async () => {
       let n = 10 // comments to fetch per request
-      let m = 5 // (times `n` comments) to consider Kafka producer queue saturated
+      let m = 5 // (times `n` comments) to define Kafka producer capacity
 
       // Processes and queues `n` comments.
       await fetchSubredditComments('politics', n, kafkaQ)
 
       await wait(5000) // pace Reddit API requests
 
-      // If Kafka producer queue isn't saturated, fetch more comments.
+      // If Kafka producer queue isn't at capacity, fetch more comments.
       if (kafkaQ.length() < n * m) {
         stream()
       }
-
-      // TODO: This should happen before the Kafka producer queue clears for efficiency.
-      // When Kafka producer queue clears, start over
-      kafkaQ.drain = stream
     }
 
     stream()
+
+    // If/When Kafka producer queue is getting empty, restart streaming
+    kafkaQ.empty = stream
+    //
   } catch (error) {
     console.error('worker error!', error)
   }

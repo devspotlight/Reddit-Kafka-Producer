@@ -3,10 +3,10 @@
 This repository is a collection of utilities and scripts dedicated to scraping comment and profile information from the reddit API and streaming it to kafka.
 
 - `profile-scraper.js`: class for accessing data from the Reddit API.
-- `profile.js`: (1) reads from a CSV file, fetches profile data, and saves to a database.
+- `profile.js`: (1) reads from a CSV file, fetches profile data, and dumps it to a database.
 - `format-comment.js`: function for formatting JSON response data.
 - `kafka-export.js`: (2) inserts JSON data to a table with a schema.
-- `kafka-stream.js`: (3) fetches comments from a subreddit and sends it to kafka. (Used in Procfile)
+- `kafka-stream.js`: (3) fetches comments from a subreddit and sends them to Kafka. (See Procfile)
 
 ## Configuration
 
@@ -42,35 +42,36 @@ $ npm i --dev
 ```
 > If `--dev` isn't used, your local installation will lack linting and CSV dump abilities.
 
-Run scripts 1-3 when needed like:
+- You may run `profile.js` if needed like:
+    
+    ```console
+    $ node profile.js
+    ```
 
-```console
-$ node profile.js
-```
+- For a CSV dump of `kafka-export.js`:
 
-or for a CSV dump of kafka-export.js:
+    ```console
+    $ npm run dev-dump
+    ```
 
-```console
-$ npm run dev-dump
-```
-> `csv-writter` encodes `"` inside strings as `""` which seems to be a CSV-specific practice. You may want to run
-> ```console
->  $ sed -i -e 's/""/\\"/g' training-dump.csv
->  ```
-> to replace them for `\"`
+    > `csv-writter` encodes `"` inside strings as `""` which seems to be a CSV-specific practice. You may want to run
+    > ```console
+    >  $ sed -i -e 's/""/\\"/g' training-dump.csv
+    >  ```
+    > to replace them for `\"`
 
-Run main (worker) app:
+- Try the main (worker) app with:
 
-```console
-$ npm run worker
-# Same as `node kafka-stream.js` (see package.json scripts)
-```
+    ```console
+    $ npm run worker
+    # Same as `node kafka-stream.js` (see package.json scripts)
+    ```
 
-> Lint before committing changes:
-> 
-> ```console
-> $ npm run lint
-> ```
+- Lint chec before committing changes:
+
+    ```console
+    $ npm run lint
+    ```
 
 ## Deploy on Heroku
 

@@ -1,5 +1,5 @@
 /**
- * 1. Reads from a CSV file, fetches profile data and comments, and saves to the database (`profiles2` table).
+ * 1. Reads from a CSV file, fetches profile data including comments, and dumps it to the database (`profiles2` table).
  * To run as a script (once, when needed).
  */
 
