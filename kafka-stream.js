@@ -68,9 +68,9 @@ async function fetchSubredditComments (subreddit, n, queue) {
   // console.debug('worker: fetch - last comment', this_last_cmt_it)
   if (prevLastComment === thisLastComment) {
     // Otherwise, try again in 1 second.
-    console.info('worker: fetch - No new comments. Will try again after 1 sec...')
+    // console.debug('worker: fetch - No new comments. Will try again after 1 sec...')
     await millis(1000)
-    console.info('worker: fetch - Trying again after 1 sec!')
+    // console.debug('worker: fetch - Trying again after 1 sec!')
     fetchSubredditComments('politics', 10, queue)
   }
 
@@ -81,9 +81,9 @@ async function fetchSubredditComments (subreddit, n, queue) {
       break
     }
   }
-  console.debug(`worker: fetch - new comments`, comments.map(
-    c => { return { id: c.id, created_utc: c.created_utc } }
-  ))
+  // console.debug(`worker: fetch - new comments`, comments.map(
+  //   c => { return { id: c.id, created_utc: c.created_utc } }
+  // ))
 
   // Updates prevLastComment for next fetch.
   prevLastComment = thisLastComment
@@ -208,7 +208,7 @@ async function main () {
 
     // If/When Kafka producer queue is getting empty, restarts streaming.
     kafkaQ.empty = () => {
-      console.info('worker: queue emptied. Restarting!')
+      // console.debug('worker: queue emptied. Restarting!')
       fetchSubredditComments('politics', 10, kafkaQ)
     }
 
