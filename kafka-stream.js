@@ -149,11 +149,12 @@ async function main () {
     const cert = process.env.KAFKA_CLIENT_CERT
     const key = process.env.KAFKA_CLIENT_CERT_KEY
 
+    let producer
     if (NODE_ENV === 'production') {
       // Creates Kafka producer. (Overwrites local files to use as Kafka credentials.)
       fs.writeFileSync('./client.crt', cert)
       fs.writeFileSync('./client.key', key)
-      const producer = new Kafka.Producer({
+      producer = new Kafka.Producer({
         clientId: 'reddit-comment-producer',
         connectionString: url.replace(/\+ssl/g, ''),
         ssl: {
