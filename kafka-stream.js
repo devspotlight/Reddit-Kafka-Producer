@@ -1,5 +1,5 @@
 /**
- * 3. Fetches n comments from the 'politics' subreddit every 5 seconds, processes and sends them to Kafka.
+ * 3. Fetches n comments from the 'politics' subreddit, processes and sends them to Kafka. Repeats.
  * To be ran as a worker.
  */
 
@@ -33,14 +33,14 @@ const scraper = new ProfileScraper()
  * @param each callback to process the subreddit comment data
  */
 async function fetchSubredditComments (subreddit, n, queue) {
-  // console.debug('worker: fetchSubredditComments fetching', n, 'comments from subreddit', subreddit)
+  // console.debug('worker: fetch -', n, 'comments from subreddit', subreddit)
 
   // Fetches reddit.com/${subreddit}/comments.json?limit=n
   let path = `https://www.reddit.com/r/${subreddit}/comments.json?limit=${n}`
 
   let response
   try {
-    console.debug('worker: fetchSubredditComments requesting', path)
+    // console.debug('worker: fetch -', path)
     response = await axios.get(path)
     // /**
     //  * Async callback to process each comment in the 'politics' subreddit.
@@ -48,18 +48,19 @@ async function fetchSubredditComments (subreddit, n, queue) {
     //  * @param response from axios.get
     //  */
   } catch (ex) {
-    console.error('worker: fetch error!', ex)
+    console.error('worker: fetch - error!', ex)
     return
   }
-  // console.debug('worker: response', response)
+  // console.debug('worker: fetch - response', response)
 
-  console.info('worker: received', response.data.data.dist, 'comments from', subreddit)
+  console.info('worker: fetch - received', response.data.data.dist, 'comments from', subreddit)
   const comments = response.data.data.children.reverse()
-  // console.debug('worker: comments', comments)
+  // console.debug('worker: fetch - comments', comments)
 
-  console.debug(`worker: children`, comments.map(
-    c => { return { name: c.data.name, created_utc: c.data.created_utc } }
-  ))
+  // console.debug(`worker: fetch - comments`, comments.map(
+  //   c => { return { id: c.data.id, created_utc: c.data.created_utc } }
+  // ))
+  // console.debug('worker: fetch - last comment', comments[comments.length - 1].data.id)
 
   // Processes each `response.data.data` (comment data).
   comments.forEach(async (child) => {
@@ -70,7 +71,7 @@ async function fetchSubredditComments (subreddit, n, queue) {
     if (profile.error) return
     // TODO: Do anything else? (fetchProfile already logs an error.)
 
-    // TODO: Use comment.name (t1_ https://www.reddit.com/dev/api#fullnames) instead of comment.link_id (t3_ fullname) !
+    // TODO: Use comment.id instead of comment.link_id !
 
     const fullComment = formatComment(profile, comment)
 
@@ -84,7 +85,7 @@ async function fetchSubredditComments (subreddit, n, queue) {
     // TODO: Do anything else? (fetchRecentComments already logs an error.)
 
     if (NODE_ENV !== 'production') {
-      console.info('worker: processing', comment.link_id, comment.created_utc, 'by', profile.name, '(with', commentsAfterId.length, 'recent commits)')
+      console.info('worker: fetch - processing', comment.link_id, comment.created_utc, 'by', profile.name, '(with', commentsAfterId.length, 'recent commits)')
     }
 
     // Attaches (≤20) previous comments by the same author to this comment (as a JSON formatted string).
@@ -93,19 +94,19 @@ async function fetchSubredditComments (subreddit, n, queue) {
     // Marks record as NOT training data.
     fullComment.is_training = false
 
-    // console.debug('worker: comment', comment)
-    // console.debug('worker: commentsAfterId', commentsAfterId)
-    // console.debug('worker: fullComment', fullComment)
+    // console.debug('worker: fetch - comment', comment)
+    // console.debug('worker: fetch - commentsAfterId', commentsAfterId)
+    // console.debug('worker: fetch - fullComment', fullComment)
 
     // if (NODE_ENV !== 'production') {
-    //   // console.debug('worker: fetchSubredditComments cb sending', fullComment)
+    //   // console.debug('worker: fetch - fetchSubredditComments cb sending', fullComment)
     //   console.debug(
-    //     'worker: full comment has [ link_id, recent_comments ]',
+    //     'worker: fetch - full comment has [ link_id, recent_comments ]',
     //     [fullComment.link_id, commentsAfterId.map(c => { return { link_id: c.link_id, created_utc: c.created_utc } })]
     //   )
     // }
 
-    // console.debug('worker: pushing', fullComment.link_id, fullComment.created_utc)
+    // console.debug('worker: fetch - queueing', fullComment.link_id, fullComment.created_utc)
     // Pushes `comment` task to `queue` (to be sent as message to Kafka).
     queue.push(fullComment)
   })
@@ -153,10 +154,10 @@ async function main () {
        * @returns {Promise<void>}
        */
       async (comment, cb) => {
-        // console.debug('worker: producing JSON.stringify of comment', comment.link_id, 'for Kafka')
-        // console.debug('worker: comment data', comment)
+        // console.debug('worker: queue - producing JSON.stringify of comment', comment.link_id, 'for Kafka')
+        // console.debug('worker: queue - comment data', comment)
 
-        // Try sending stringified JSON `comment` to Kafka
+        // Try sending stringified JSON `comment` to Kafkaworker: children
         if (NODE_ENV === 'production') {
           try {
             let result = await producer.send({
@@ -166,41 +167,27 @@ async function main () {
               // TODO: Don't JSON.stringify `message`? See https://www.npmjs.com/package/kafka-node#sendpayloads-cb
               message: { value: JSON.stringify(comment) }
             })
-            console.info('worker: Kafka producer sent comment', comment.link_id, comment.created_utc, '- offset', result[0].offset)
+            console.info('worker: queue - Kafka producer sent comment', comment.link_id, comment.created_utc, '- offset', result[0].offset)
             // console.debug('response', result)
           } catch (error) {
-            console.error('worker: Kafka producer submission error!', error)
+            console.error('worker: queue - Kafka producer submission error!', error)
           }
         } else {
-          console.info('worker: would produce (Kafka) message with key', `${comment.link_id}.${comment.created_utc} (comment by ${comment.author}). Q len`, kafkaQ.length())
+          console.info('worker: queue - would produce', (JSON.stringify(comment).length * 2) , 'B (Kafka) message', `${comment.link_id} ${comment.created_utc} (comment by ${comment.author}). Q len`, kafkaQ.length())
         }
-        await wait(500) // pace Kafka producer
+        await wait(333) // pace Kafka producer // aprox speed for 64 KB rate limit (w/ avg msg size of 20 KB)
         cb()
       },
       1)
 
-    /**
-     * Fn (to be ran at interval) for streaming comments as messages to the Kafka topic
-     */
-    const stream = async () => {
-      let n = 10 // comments to fetch per request
-      let m = 5 // (times `n` comments) to define Kafka producer capacity
-
-      // Processes and queues `n` comments.
-      await fetchSubredditComments('politics', n, kafkaQ)
-
-      await wait(5000) // pace Reddit API requests
-
-      // If Kafka producer queue isn't at capacity, fetch more comments.
-      if (kafkaQ.length() < n * m) {
-        stream()
-      }
+    // If/When Kafka producer queue is getting empty, restarts streaming.
+    kafkaQ.empty = () => {
+      // console.debug('worker: queue.empty')
+      fetchSubredditComments('politics', 10, kafkaQ)
     }
 
-    stream()
-
-    // If/When Kafka producer queue is getting empty, restart streaming
-    kafkaQ.empty = stream
+    // Starts streaming.
+    fetchSubredditComments('politics', 10, kafkaQ)
     //
   } catch (error) {
     console.error('worker error!', error)

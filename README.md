@@ -26,6 +26,8 @@ and:
 - `KAFKA_CLIENT_CERT`
 - `KAFKA_CLIENT_CERT_KEY`
 - `KAFKA_URL`
+- `KAFKA_PREFIX`
+- `KAFKA_TOPIC`
 
 > Only the latter KAFKA_ ones are needed for the export and stream scripts.
 
@@ -75,13 +77,13 @@ $ npm i --dev
 
 ## Deploy on Heroku
 
-Most of the env vars mentioned before are set automatically by Heroku Pg and Kafka addons, you must separately set:
+> Note that the producer worker (kafka-stream.js) is paced (hardcoded) to send messages to Kafka every 1/3 sec, matching an aprox rate limit of 64 KB (such as the basic-0 tier on Heroku); estimating an avg message size of 20 KB.
+
+Most of the env vars mentioned before are set automatically by Heroku Postgres and Kafka addons, you must separately set:
 
 ```console
 $ heroku config:set NODE_ENV=production
 ```
-
-The kafka-stream.js worker expects [log compaction](https://devcenter.heroku.com/articles/kafka-on-heroku#log-compaction) on the Kafka topic.
 
 > Also unpack `DATABASE_URL` e.g. with https://metacpan.org/pod/Env::Heroku ?
   See https://devcenter.heroku.com/articles/heroku-postgresql#provisioning-heroku-postgres
