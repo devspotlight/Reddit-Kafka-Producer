@@ -22,10 +22,13 @@ const NODE_ENV = process.env.NODE_ENV
  * @param ms milliseconds to wait
  * @returns {Promise<any>}
  */
-let wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+let millis = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 // Creates a ProfileScraper.
 const scraper = new ProfileScraper()
+
+// There's no previosly last comment id for the first fetch.
+let prevLastComment = false
 
 /**
  * Fetches and process `n` comments from `subreddit`
@@ -51,21 +54,43 @@ async function fetchSubredditComments (subreddit, n, queue) {
     console.error('worker: fetch - error!', ex)
     return
   }
+  // console.debug('worker: fetch - received', response.data.data.dist, `comments from r/${subreddit}`)
   // console.debug('worker: fetch - response', response)
 
-  console.info('worker: fetch - received', response.data.data.dist, 'comments from', subreddit)
-  const comments = response.data.data.children.reverse()
-  // console.debug('worker: fetch - comments', comments)
-
+  // Extracts and reorgs comments from response data.
+  let comments = response.data.data.children.reverse().map(c => c.data)
   // console.debug(`worker: fetch - comments`, comments.map(
-  //   c => { return { id: c.data.id, created_utc: c.data.created_utc } }
+  //   c => { return { id: c.id, created_utc: c.created_utc } }
   // ))
-  // console.debug('worker: fetch - last comment', comments[comments.length - 1].data.id)
 
-  // Processes each `response.data.data` (comment data).
-  comments.forEach(async (child) => {
+  // Checks last comment hasn't been processed yet before continuing.
+  const thisLastComment = comments[comments.length - 1].id
+  // console.debug('worker: fetch - last comment', this_last_cmt_it)
+  if (prevLastComment === thisLastComment) {
+    // Otherwise, try again in 1 second.
+    console.info('worker: fetch - No new comments. Will try again after 1 sec...')
+    await millis(1000)
+    console.info('worker: fetch - Trying again after 1 sec!')
+    fetchSubredditComments('politics', 10, queue)
+  }
+
+  // Removes comments up to `prevLastComment` (if present) – to process only new ones.
+  for (let c = 0; c < comments.length; c++) {
+    if (comments[c].id === prevLastComment) {
+      comments = comments.slice(c + 1)
+      break
+    }
+  }
+  console.debug(`worker: fetch - new comments`, comments.map(
+    c => { return { id: c.id, created_utc: c.created_utc } }
+  ))
+
+  // Updates prevLastComment for next fetch.
+  prevLastComment = thisLastComment
+
+  // Processes and queues each (new) comment!
+  comments.forEach(async (comment) => {
     // FIXME: This async `forEach` callback messes up the queueing order (`queue.push`).
-    const comment = child.data
     const profile = await scraper.fetchProfile(comment.author)
 
     if (profile.error) return
@@ -175,14 +200,14 @@ async function main () {
         } else {
           console.info('worker: queue - would produce', (JSON.stringify(comment).length * 2) , 'B (Kafka) message', `${comment.link_id} ${comment.created_utc} (comment by ${comment.author}). Q len`, kafkaQ.length())
         }
-        await wait(333) // pace Kafka producer // aprox speed for 64 KB rate limit (w/ avg msg size of 20 KB)
+        await millis(333) // pace Kafka producer // aprox speed for 64 KB rate limit (w/ avg msg size of 20 KB)
         cb()
       },
       1)
 
     // If/When Kafka producer queue is getting empty, restarts streaming.
     kafkaQ.empty = () => {
-      // console.debug('worker: queue.empty')
+      console.info('worker: queue emptied. Restarting!')
       fetchSubredditComments('politics', 10, kafkaQ)
     }
 
