@@ -14,7 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "async.queue": "^0.5.2",
-    "axios": "^0.18.0",
+    "axios": "^0.21.1",
     "dotenv": "^7.0.0",
     "no-kafka": "^3.4.3",
     "pg": "^7.8.0",
